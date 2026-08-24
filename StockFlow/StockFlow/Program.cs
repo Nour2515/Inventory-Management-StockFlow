@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StockFlow.Data;
+using StockFlow.Interfaces;
 using StockFlow.IRepository;
 using StockFlow.Repositories;
+using StockFlow.Services;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,6 +26,8 @@ builder.Services.AddIdentity<User, IdentityRole<int>>(options=>
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
+builder.Services.AddScoped<IAuthService, AuthServices>();
+builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services
     .AddAuthentication(options =>
     {
