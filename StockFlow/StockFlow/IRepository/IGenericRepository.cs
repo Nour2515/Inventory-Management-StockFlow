@@ -8,4 +8,6 @@ public interface IGenericRepository<TEntity>
     Task AddAsync(TEntity entity, CancellationToken cancellationToken = default);
     void Update(TEntity entity);
     void Delete(TEntity entity);
+
+    Task SaveChangesAsync();
 }

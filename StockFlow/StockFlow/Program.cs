@@ -26,6 +26,12 @@ builder.Services.AddIdentity<User, IdentityRole<int>>(options=>
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
 
+builder.Services.AddScoped<ICategoryRepo, CategoryRepo>();
+builder.Services.AddScoped<IProductRepository, ProductRepo>();
+
+builder.Services.AddScoped<ICategoryService, CategoryServices>();
+builder.Services.AddScoped<IProductService, ProductServices>();
+
 builder.Services.AddScoped<IAuthService, AuthServices>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services
@@ -39,29 +45,44 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
-        var jwt = builder.Configuration
-            .GetSection("Jwt");
+        var jwt = builder.Configuration.GetSection("Jwt");
 
-        options.TokenValidationParameters =
-            new TokenValidationParameters
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+
+            ValidIssuer = jwt["Issuer"],
+            ValidAudience = jwt["Audience"],
+
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwt["Key"]!)
+            ),
+
+            ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
             {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
+                Console.WriteLine("JWT ERROR:");
+                Console.WriteLine(context.Exception.Message);
 
-                ValidIssuer = jwt["Issuer"],
-                ValidAudience = jwt["Audience"],
+                return Task.CompletedTask;
+            },
 
-                IssuerSigningKey =
-                    new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(
-                            jwt["Key"]!
-                        )
-                    ),
+            OnChallenge = context =>
+            {
+                Console.WriteLine("JWT CHALLENGE:");
+                Console.WriteLine(context.Error);
+                Console.WriteLine(context.ErrorDescription);
 
-                ClockSkew = TimeSpan.Zero
-            };
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -76,6 +97,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseAuthentication();
 
 app.UseAuthorization();
 

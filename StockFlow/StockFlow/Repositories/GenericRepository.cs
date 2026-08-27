@@ -4,9 +4,14 @@ using StockFlow.IRepository;
 
 namespace StockFlow.Repositories;
 
-public class GenericRepository<TEntity>(AppDbContext context) : IGenericRepository<TEntity>
+public class GenericRepository<TEntity> : IGenericRepository<TEntity>
     where TEntity : class
 {
+    private readonly AppDbContext context;
+
+    public GenericRepository(AppDbContext _context) {
+       context=_context;
+    }
     public async Task<TEntity?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         return await context.Set<TEntity>().FindAsync([id], cancellationToken);
@@ -30,5 +35,10 @@ public class GenericRepository<TEntity>(AppDbContext context) : IGenericReposito
     public void Delete(TEntity entity)
     {
         context.Set<TEntity>().Remove(entity);
+    }
+
+    public async Task SaveChangesAsync()
+    {
+        await context.SaveChangesAsync();
     }
 }

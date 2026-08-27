@@ -33,8 +33,7 @@ namespace StockFlow.Services
                 ?? throw new InvalidOperationException("JWT Audience is missing.");
 
             var expirationMinutes = int.Parse(
-                jwtSettings["AccessTokenExpirationMinutes"]
-                ?? "15");
+                jwtSettings["AccessTokenMinutes"] ?? "15");
 
             var claims = new List<Claim>
         {
