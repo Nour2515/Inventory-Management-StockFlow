@@ -3,9 +3,9 @@ namespace StockFlow.IRepository;
 public interface IGenericRepository<TEntity>
     where TEntity : class
 {
-    Task<TEntity?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<TEntity>> GetAllAsync(CancellationToken cancellationToken = default);
-    Task AddAsync(TEntity entity, CancellationToken cancellationToken = default);
+    Task<TEntity?> GetByIdAsync(int id);
+    Task<IReadOnlyList<TEntity>> GetAllAsync();
+    Task AddAsync(TEntity entity);
     void Update(TEntity entity);
     void Delete(TEntity entity);
 

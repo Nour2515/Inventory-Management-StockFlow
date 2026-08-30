@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using StockFlow.Data;
 using StockFlow.Interfaces;
 using StockFlow.IRepository;
+using StockFlow.Models;
 using StockFlow.Repositories;
 using StockFlow.Services;
 using System.Text;
@@ -29,8 +30,14 @@ builder.Services.AddIdentity<User, IdentityRole<int>>(options=>
 builder.Services.AddScoped<ICategoryRepo, CategoryRepo>();
 builder.Services.AddScoped<IProductRepository, ProductRepo>();
 
+builder.Services.AddScoped<IInventoryRepository, InventoryRepo>();
+builder.Services.AddScoped<IGenericRepository<Warehouse>, WarehouseRepo>();
+
 builder.Services.AddScoped<ICategoryService, CategoryServices>();
 builder.Services.AddScoped<IProductService, ProductServices>();
+
+builder.Services.AddScoped<IinventoryServices, InventoryServices>();
+builder.Services.AddScoped<IWarehouseService, WarehouseServices>();
 
 builder.Services.AddScoped<IAuthService, AuthServices>();
 builder.Services.AddScoped<ITokenService, TokenService>();
@@ -45,44 +52,29 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
-        var jwt = builder.Configuration.GetSection("Jwt");
+        var jwt = builder.Configuration
+            .GetSection("Jwt");
 
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-
-            ValidIssuer = jwt["Issuer"],
-            ValidAudience = jwt["Audience"],
-
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwt["Key"]!)
-            ),
-
-            ClockSkew = TimeSpan.Zero
-        };
-
-        options.Events = new JwtBearerEvents
-        {
-            OnAuthenticationFailed = context =>
+        options.TokenValidationParameters =
+            new TokenValidationParameters
             {
-                Console.WriteLine("JWT ERROR:");
-                Console.WriteLine(context.Exception.Message);
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
 
-                return Task.CompletedTask;
-            },
+                ValidIssuer = jwt["Issuer"],
+                ValidAudience = jwt["Audience"],
 
-            OnChallenge = context =>
-            {
-                Console.WriteLine("JWT CHALLENGE:");
-                Console.WriteLine(context.Error);
-                Console.WriteLine(context.ErrorDescription);
+                IssuerSigningKey =
+                    new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(
+                            jwt["Key"]!
+                        )
+                    ),
 
-                return Task.CompletedTask;
-            }
-        };
+                ClockSkew = TimeSpan.Zero
+            };
     });
 
 builder.Services.AddAuthorization();

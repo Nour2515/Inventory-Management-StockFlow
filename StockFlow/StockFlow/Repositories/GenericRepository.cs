@@ -12,22 +12,22 @@ public class GenericRepository<TEntity> : IGenericRepository<TEntity>
     public GenericRepository(AppDbContext _context) {
        context=_context;
     }
-    public async Task<TEntity?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+    public virtual async Task<TEntity?> GetByIdAsync(int id)
     {
-        return await context.Set<TEntity>().FindAsync([id], cancellationToken);
+        return await context.Set<TEntity>().FindAsync([id]);
     }
 
-    public async Task<IReadOnlyList<TEntity>> GetAllAsync(CancellationToken cancellationToken = default)
+    public virtual async Task<IReadOnlyList<TEntity>> GetAllAsync()
     {
-        return await context.Set<TEntity>().AsNoTracking().ToListAsync(cancellationToken);
+        return await context.Set<TEntity>().AsNoTracking().ToListAsync();
     }
 
-    public async Task AddAsync(TEntity entity, CancellationToken cancellationToken = default)
+    public virtual async Task AddAsync(TEntity entity)
     {
-        await context.Set<TEntity>().AddAsync(entity, cancellationToken);
+        await context.Set<TEntity>().AddAsync(entity);
     }
 
-    public void Update(TEntity entity)
+    public virtual void Update(TEntity entity)
     {
         context.Set<TEntity>().Update(entity);
     }
