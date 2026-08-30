@@ -52,7 +52,7 @@ public class InventoryController : ControllerBase
 
     }
     [HttpGet("availability")]
-    public async Task<IActionResult> CheckAvailability([FromBody] int productId,[FromQuery] int warehouseId,[FromQuery] int quantity)
+    public async Task<IActionResult> CheckAvailability([FromQuery] int productId,[FromQuery] int warehouseId,[FromQuery] int quantity)
     { 
         var result = await _inventoryServices.CheckAvailabilityAsync(productId, warehouseId, quantity);
         return Ok(result); 

@@ -137,8 +137,8 @@ namespace StockFlow.Services
                 Id = inventory.Id,
                 ProductId = inventory.ProductId,
                 ProductName = inventory.Product.Name,
-            
-            
+                WarehouseId = inventory.WarehouseId,
+                WarehouseName = inventory.Warehouse.Name,
                 OnHandQuantity = inventory.OnHandQuantity,
                 ReservedQuantity = inventory.ReservedQuantity,
             
@@ -156,6 +156,10 @@ namespace StockFlow.Services
             return inventories.Select(inventory => new InventoryResponse
             {
                 Id = inventory.Id,
+
+                ProductId=inventory.ProductId,
+
+                ProductName = inventory.Product.Name,
                 WarehouseId = inventory.WarehouseId,
                 WarehouseName = inventory.Warehouse.Name,
 

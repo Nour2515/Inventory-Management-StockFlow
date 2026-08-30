@@ -38,6 +38,9 @@ builder.Services.AddScoped<IProductService, ProductServices>();
 
 builder.Services.AddScoped<IinventoryServices, InventoryServices>();
 builder.Services.AddScoped<IWarehouseService, WarehouseServices>();
+builder.Services.AddScoped<IOrderRepo, OrderRepo>();
+builder.Services.AddScoped<IOrderServices, OrderServices>();
+
 
 builder.Services.AddScoped<IAuthService, AuthServices>();
 builder.Services.AddScoped<ITokenService, TokenService>();
