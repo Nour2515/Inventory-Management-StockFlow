@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using StockFlow.Models;
+using System.Reflection.Emit;
 
 namespace StockFlow.Data.Configurations;
 
@@ -24,6 +25,10 @@ public class InventoryConfiguration : IEntityTypeConfiguration<Inventory>
         builder.Property(inventory => inventory.UpdatedAt)
             .IsRequired()
             .HasDefaultValueSql("SYSUTCDATETIME()");
+
+        builder.Property(i => i.RowVersion)
+            .IsRowVersion().
+            IsConcurrencyToken();
 
         builder.HasIndex(inventory => new { inventory.ProductId, inventory.WarehouseId })
             .IsUnique();

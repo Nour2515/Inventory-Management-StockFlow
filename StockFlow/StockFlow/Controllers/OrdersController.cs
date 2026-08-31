@@ -32,6 +32,8 @@ public class OrdersController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = order.Id }, order);
     }
     [HttpGet]
+    [Authorize(Roles = "Admin")]
+
     public async Task<IActionResult> GetAllOrders() { 
     var orders = await _orderServices.GetAllAsync();
         return Ok(orders);

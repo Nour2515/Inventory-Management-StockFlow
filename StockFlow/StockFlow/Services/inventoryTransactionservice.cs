@@ -1,0 +1,362 @@
+﻿using StockFlow.Data;
+using StockFlow.DTOs.Transaction;
+using StockFlow.Interfaces;
+using StockFlow.IRepository;
+using StockFlow.Models;
+using StockFlow.Models.Enums;
+
+namespace StockFlow.Services
+{
+    public class inventoryTransactionservice : IinventoryTransactionservice
+    {
+        private readonly IInventoryTransactionRepo _transactionRepository;
+        private readonly IInventoryRepository _inventoryRepository;
+        private readonly IProductRepository _productRepository;
+        private readonly IGenericRepository<Warehouse> _warehouseRepository;
+        private readonly AppDbContext _context;
+
+        public inventoryTransactionservice(IInventoryTransactionRepo transactionRepository,IInventoryRepository inventoryRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,AppDbContext context)
+        {
+            _transactionRepository = transactionRepository;
+            _inventoryRepository = inventoryRepository;
+            _productRepository = productRepository;
+            _warehouseRepository = warehouseRepository;
+            _context = context;
+        }
+
+
+        public async Task<IEnumerable<InventoryTransactionResponse>> GetAllAsync()
+        {
+            var transactions =await _transactionRepository.GetAllAsync();
+
+            return transactions.Select(transaction =>
+                new InventoryTransactionResponse
+                {
+                    Id = transaction.Id,
+
+                    ProductId = transaction.ProductId,
+                    ProductName = transaction.Product.Name,
+
+                    WarehouseId = transaction.WarehouseId,
+                    WarehouseName = transaction.Warehouse.Name,
+
+                    Quantity = transaction.Quantity,
+
+                    Type = transaction.Type,
+
+                    Reference = transaction.ReferenceId,
+
+                    CreatedAt = transaction.CreatedAt
+                });
+        }
+
+
+        public async Task<InventoryTransactionResponse?> GetByIdAsync(int id)
+        {
+            var transaction =
+                await _transactionRepository.GetByIdAsync(id);
+
+            if (transaction == null)
+                return null;
+
+            return new InventoryTransactionResponse
+            {
+                Id = transaction.Id,
+
+                ProductId = transaction.ProductId,
+                ProductName = transaction.Product.Name,
+
+                WarehouseId = transaction.WarehouseId,
+                WarehouseName = transaction.Warehouse.Name,
+
+                Quantity = transaction.Quantity,
+
+                Type = transaction.Type,
+
+                Reference = transaction.ReferenceId,
+
+                CreatedAt = transaction.CreatedAt
+            };
+        }
+
+
+  
+
+        public async Task<IEnumerable<InventoryTransactionResponse>>GetByProductAndWarehouseAsync(int productId,int warehouseId)
+        {
+    
+            var transactions =
+                await _transactionRepository.GetByWarehouseandproductIdAsync(warehouseId,productId);
+
+            return transactions.Select(transaction =>
+                new InventoryTransactionResponse
+                {
+                    Id = transaction.Id,
+
+                    ProductId = transaction.ProductId,
+                    ProductName = transaction.Product.Name,
+
+                    WarehouseId = transaction.WarehouseId,
+                    WarehouseName = transaction.Warehouse.Name,
+
+                    Quantity = transaction.Quantity,
+
+                    Type = transaction.Type,
+
+                    Reference = transaction.ReferenceId,
+
+                    CreatedAt = transaction.CreatedAt
+                });
+        }
+
+
+        public async Task<IEnumerable<InventoryTransactionResponse>>GetByProductIdAsync(int productId)
+        {
+            var transactions =await _transactionRepository.GetByProductIdAsync(productId);
+
+            return transactions.Select(transaction =>
+                new InventoryTransactionResponse
+                {
+                    Id = transaction.Id,
+
+                    ProductId = transaction.ProductId,
+                    ProductName = transaction.Product.Name,
+
+                    WarehouseId = transaction.WarehouseId,
+                    WarehouseName = transaction.Warehouse.Name,
+
+                    Quantity = transaction.Quantity,
+
+                    Type = transaction.Type,
+
+                    Reference = transaction.ReferenceId,
+
+                    CreatedAt = transaction.CreatedAt
+                });
+        }
+
+        public async Task<IEnumerable<InventoryTransactionResponse>> GetByWarehouseIdAsync(int warehouseId)
+        {
+            var transactions =
+                await _transactionRepository
+                    .GetByWarehouseIdAsync(warehouseId);
+
+            return transactions.Select(transaction =>
+                new InventoryTransactionResponse
+                {
+                    Id = transaction.Id,
+
+                    ProductId = transaction.ProductId,
+                    ProductName = transaction.Product.Name,
+
+                    WarehouseId = transaction.WarehouseId,
+                    WarehouseName = transaction.Warehouse.Name,
+
+                    Quantity = transaction.Quantity,
+
+                    Type = transaction.Type,
+
+                    Reference = transaction.ReferenceId,
+
+                    CreatedAt = transaction.CreatedAt
+                });
+        }
+
+        public async Task<IEnumerable<InventoryTransactionResponse>>GetByTypeAsync(InventoryTransactionType type)
+        {
+            var transactions =await _transactionRepository.GetByTypeAsync(type);
+
+            return transactions.Select(transaction =>
+                new InventoryTransactionResponse
+                {
+                    Id = transaction.Id,
+
+                    ProductId = transaction.ProductId,
+                    ProductName = transaction.Product.Name,
+
+                    WarehouseId = transaction.WarehouseId,
+                    WarehouseName = transaction.Warehouse.Name,
+
+                    Quantity = transaction.Quantity,
+
+                    Type = transaction.Type,
+
+                    Reference = transaction.ReferenceId,
+
+                    CreatedAt = transaction.CreatedAt
+                });
+        }
+
+        public async Task<InventoryTransactionResponse>ProcessTransactionAsync(CreateInventoryTransactionRequest request)
+        {
+            if (request.Quantity <= 0)
+                throw new Exception( "Quantity must be greater than zero.");
+
+            var product =await _productRepository.GetByIdAsync(request.ProductId);
+
+            if (product == null)
+                throw new Exception("Product does not exist.");
+
+            var warehouse =await _warehouseRepository.GetByIdAsync(request.WarehouseId);
+
+            if (warehouse == null)
+                throw new Exception(
+                    "Warehouse does not exist.");
+
+            if (!warehouse.IsActive)
+                throw new Exception(
+                    "Warehouse is inactive.");
+
+
+            var inventory =await _inventoryRepository.GetByProductAndWarehouseAsync(request.ProductId,request.WarehouseId);
+
+            if (inventory == null)
+                throw new Exception("Inventory does not exist for this product and warehouse.");
+
+            await using var dbTransaction =
+                await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                int transactionQuantity;
+
+                switch (request.Type)
+                {
+                    case InventoryTransactionType.StockIn:
+
+                        inventory.OnHandQuantity +=request.Quantity;
+
+                        transactionQuantity =request.Quantity;
+
+                        break;
+
+                    case InventoryTransactionType.Sale:
+
+                        var availableForSale =inventory.OnHandQuantity -inventory.ReservedQuantity;
+
+                        if (request.Quantity >availableForSale)
+                        {
+                            throw new Exception("Insufficient available stock.");
+                        }
+
+                        inventory.OnHandQuantity -= request.Quantity;
+
+                        transactionQuantity =-request.Quantity;
+
+                        break;
+
+                    case InventoryTransactionType.Return:
+
+                        inventory.OnHandQuantity +=request.Quantity;
+
+                        transactionQuantity =request.Quantity;
+
+                        break;
+
+
+                    case InventoryTransactionType.TransferIn:
+
+                        inventory.OnHandQuantity +=request.Quantity;
+
+                        transactionQuantity =request.Quantity;
+
+                        break;
+
+                    case InventoryTransactionType.TransferOut:
+
+                        var availableForTransfer =inventory.OnHandQuantity -inventory.ReservedQuantity;
+
+                        if (request.Quantity >availableForTransfer)
+                        {
+                            throw new Exception("Insufficient available stock.");
+                        }
+
+                        inventory.OnHandQuantity -=request.Quantity;
+
+                        transactionQuantity =-request.Quantity;
+
+                        break;
+
+                    // Reservation and ReservationReleased
+                    // are NOT handled here.
+                  
+
+                    default:
+
+                        throw new Exception("This transaction type cannot be processed here.");
+                }
+
+
+                inventory.UpdatedAt =DateTime.UtcNow;
+
+                _inventoryRepository.Update(inventory);
+
+
+                var transaction =
+                    new InventoryTransaction
+                    {
+                        ProductId =
+                            request.ProductId,
+
+                        WarehouseId =
+                            request.WarehouseId,
+
+                        Quantity =
+                            transactionQuantity,
+
+                        Type =
+                            request.Type,
+
+                        ReferenceId =
+                            request.Reference,
+
+                        CreatedAt =
+                            DateTime.UtcNow
+                    };
+
+
+                await _transactionRepository.AddAsync(transaction);
+
+                await _context.SaveChangesAsync();
+
+                await dbTransaction.CommitAsync();
+
+
+                return new InventoryTransactionResponse
+                {
+                    Id = transaction.Id,
+
+                    ProductId =
+                        transaction.ProductId,
+
+                    ProductName =
+                        product.Name,
+
+                    WarehouseId =
+                        transaction.WarehouseId,
+
+                    WarehouseName =
+                        warehouse.Name,
+
+                    Quantity =
+                        transaction.Quantity,
+
+                    Type =
+                        transaction.Type,
+
+                    Reference =
+                        transaction.ReferenceId,
+
+                    CreatedAt =
+                        transaction.CreatedAt
+                };
+            }
+            catch
+            {
+                await dbTransaction.RollbackAsync();
+
+                throw;
+            }
+        }
+    }
+}

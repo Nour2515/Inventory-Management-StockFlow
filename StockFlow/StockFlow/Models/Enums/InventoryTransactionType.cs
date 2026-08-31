@@ -7,7 +7,6 @@ public enum InventoryTransactionType
     Return = 3,
     TransferIn = 4,
     TransferOut = 5,
-    Adjustment = 6,
-    Reservation = 7,
-    ReservationReleased = 8
+    Reservation = 6,
+    ReservationReleased = 7
 }

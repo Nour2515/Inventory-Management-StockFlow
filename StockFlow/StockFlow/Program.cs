@@ -41,6 +41,11 @@ builder.Services.AddScoped<IWarehouseService, WarehouseServices>();
 builder.Services.AddScoped<IOrderRepo, OrderRepo>();
 builder.Services.AddScoped<IOrderServices, OrderServices>();
 
+builder.Services.AddScoped<IStockReservationRepository, StockReservationRepo>();
+builder.Services.AddScoped<IStockReservationService, StockReservationService>();
+
+builder.Services.AddScoped<IInventoryTransactionRepo, InventoryTransactionRepo>();
+builder.Services.AddScoped<IinventoryTransactionservice, inventoryTransactionservice>();
 
 builder.Services.AddScoped<IAuthService, AuthServices>();
 builder.Services.AddScoped<ITokenService, TokenService>();

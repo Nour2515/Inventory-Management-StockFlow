@@ -1,0 +1,453 @@
+﻿using StockFlow.Data;
+using StockFlow.DTOs.Reservation;
+using StockFlow.Interfaces;
+using StockFlow.IRepository;
+using StockFlow.Models;
+using StockFlow.Models.Enums;
+using System.Diagnostics;
+
+namespace StockFlow.Services
+{
+    public class StockReservationService : IStockReservationService
+    {
+        private readonly IStockReservationRepository _stockReservationRepository;
+
+        private readonly IOrderRepo _orderRepo;
+
+        private readonly IProductRepository _productrepo;
+
+        private readonly IGenericRepository<Warehouse> _Warehouserepo;
+
+        private readonly IInventoryRepository _inventoryrepo;
+
+        private readonly IInventoryTransactionRepo _transactionRepository;
+
+        private readonly AppDbContext _context;
+
+
+        public StockReservationService(IStockReservationRepository stockReservationRepository,IOrderRepo orderRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,IInventoryRepository inventoryRepository,IInventoryTransactionRepo transactionRepository,AppDbContext context)
+        {
+            _stockReservationRepository =stockReservationRepository;
+
+            _orderRepo =orderRepository;
+
+            _productrepo =productRepository;
+
+            _Warehouserepo =warehouseRepository;
+
+            _inventoryrepo =inventoryRepository;
+
+            _transactionRepository =transactionRepository;
+
+            _context =context;
+        }
+
+
+        public async Task<ReservationResponse> CreateAsync(CreateReservationRequest request)
+        {
+            if (request.Quantity <= 0)
+            {
+                throw new Exception(
+                    "Quantity must be greater than zero.");
+            }
+
+            var order = await _orderRepo.GetByIdAsync(request.OrderId);
+
+            if (order == null)
+                throw new Exception("Order not found.");
+
+            var product =await _productrepo.GetByIdAsync(request.ProductId);
+
+            if (product == null)
+                throw new Exception("Product not found.");
+
+            if (!product.IsActive)
+                throw new Exception("Product is not active.");
+
+
+            var warehouse =await _Warehouserepo.GetByIdAsync(request.WarehouseId);
+
+            if (warehouse == null)
+                throw new Exception("Warehouse not found.");
+
+            if (!warehouse.IsActive)
+                throw new Exception("Warehouse is inactive.");
+
+            var inventory =await _inventoryrepo.GetByProductAndWarehouseAsync( request.ProductId, request.WarehouseId);
+
+            if (inventory == null)
+                throw new Exception("Inventory not found.");
+
+            var availableQuantity =inventory.OnHandQuantity -inventory.ReservedQuantity;
+
+            if (request.Quantity > availableQuantity)
+            {
+                throw new Exception($"Insufficient quantity. Available quantity is: {availableQuantity}");
+            }
+            //Transaction 
+            await using var dbTransaction =await _context.Database.BeginTransactionAsync();
+
+            try
+            { 
+                //process 1
+                var stockReservation =new StockReservation
+                    {
+                        OrderId =request.OrderId,
+
+                        ProductId =request.ProductId,
+
+                        WarehouseId =request.WarehouseId,
+
+                        Quantity =request.Quantity,
+
+                        Status =ReservationStatus.Active,
+
+                        CreatedAt =DateTime.UtcNow,
+
+                        ExpiresAt =DateTime.UtcNow.AddMinutes(30)
+                    };
+
+
+                await _stockReservationRepository.AddAsync(stockReservation);
+                //process 2
+                inventory.ReservedQuantity +=request.Quantity;
+
+                inventory.UpdatedAt =DateTime.UtcNow;
+
+                _inventoryrepo.Update(inventory);
+                //Process 3
+                var inventoryTransaction =new InventoryTransaction
+                    {
+                        ProductId =request.ProductId,
+
+                        WarehouseId =request.WarehouseId,
+
+                        Quantity =request.Quantity,
+
+                        Type =InventoryTransactionType.Reservation,
+
+                        CreatedAt =DateTime.UtcNow
+                    };
+
+
+                await _transactionRepository.AddAsync(inventoryTransaction);
+
+                await _context.SaveChangesAsync();
+
+                await dbTransaction.CommitAsync();
+
+
+                return new ReservationResponse
+                {
+                    Id =stockReservation.Id,
+
+                    OrderId =stockReservation.OrderId,
+
+                    ProductId =stockReservation.ProductId,
+
+                    ProductName =product.Name,
+
+                    WarehouseId =stockReservation.WarehouseId,
+
+                    WarehouseName =warehouse.Name,
+
+                    Quantity =stockReservation.Quantity,
+
+                    ExpiresAt =stockReservation.ExpiresAt,
+
+                    Status =stockReservation.Status,
+
+                    CreatedAt =stockReservation.CreatedAt
+                };
+            }
+            catch
+            {
+                await dbTransaction.RollbackAsync();
+
+                throw;
+            }
+        }
+
+        public async Task CancelAsync(int id)
+        {
+            var reservation =await _stockReservationRepository.GetByIdWithDetailsAsync(id);
+
+            if (reservation == null)
+                throw new Exception("Reservation not found.");
+
+            if (reservation.Status !=ReservationStatus.Active)
+            {
+                throw new Exception("Only active reservations can be cancelled.");
+            }
+
+
+            var inventory =await _inventoryrepo.GetByProductAndWarehouseAsync(reservation.ProductId,reservation.WarehouseId);
+
+            if (inventory == null)
+                throw new Exception("Inventory not found.");
+
+
+            if (inventory.ReservedQuantity <reservation.Quantity)
+            {
+                throw new Exception("Reserved quantity is invalid.");
+            }
+
+
+            await using var dbTransaction =
+                await _context.Database
+                    .BeginTransactionAsync();
+
+            try
+            {
+
+                inventory.ReservedQuantity -=reservation.Quantity;
+
+                inventory.UpdatedAt =DateTime.UtcNow;
+
+
+                reservation.Status =ReservationStatus.Cancelled;
+
+
+                _inventoryrepo.Update(inventory);
+
+                _stockReservationRepository.Update(reservation);
+
+
+                var inventoryTransaction =
+                    new InventoryTransaction
+                    {
+                        ProductId =
+                            reservation.ProductId,
+
+                        WarehouseId =
+                            reservation.WarehouseId,
+
+                        Quantity =-reservation.Quantity,
+
+                        Type =
+                            InventoryTransactionType
+                                .ReservationReleased,
+
+                        CreatedAt =
+                            DateTime.UtcNow
+                    };
+
+
+                await _transactionRepository
+                    .AddAsync(inventoryTransaction);
+
+                await _context.SaveChangesAsync();
+
+
+                await dbTransaction.CommitAsync();
+            }
+            catch
+            {
+                await dbTransaction.RollbackAsync();
+
+                throw;
+            }
+        }
+
+        public async Task ReleaseAsync(int id)
+        {
+            var reservation = await _stockReservationRepository.GetByIdWithDetailsAsync(id);
+
+            if (reservation == null)
+                throw new Exception("Reservation not found.");
+
+            if (reservation.Status != ReservationStatus.Active)
+            {
+                throw new Exception("Only active reservations can be cancelled.");
+            }
+
+
+            var inventory = await _inventoryrepo.GetByProductAndWarehouseAsync(reservation.ProductId, reservation.WarehouseId);
+
+            if (inventory == null)
+                throw new Exception("Inventory not found.");
+
+
+            if (inventory.ReservedQuantity < reservation.Quantity)
+            {
+                throw new Exception("Reserved quantity is invalid.");
+            }
+
+
+            await using var dbTransaction =
+                await _context.Database
+                    .BeginTransactionAsync();
+
+            try
+            {
+
+                inventory.ReservedQuantity -= reservation.Quantity;
+
+                inventory.UpdatedAt =DateTime.UtcNow;
+
+                reservation.Status =ReservationStatus.Released;
+
+
+                _inventoryrepo.Update(inventory);
+
+                _stockReservationRepository.Update(reservation);
+
+                var inventoryTransaction =
+                    new InventoryTransaction
+                    {
+                        ProductId =
+                            reservation.ProductId,
+
+                        WarehouseId =
+                            reservation.WarehouseId,
+
+                        Quantity =
+                            -reservation.Quantity,
+
+                        Type =
+                            InventoryTransactionType
+                                .ReservationReleased,
+
+                        CreatedAt =
+                            DateTime.UtcNow
+                    };
+
+
+                await _transactionRepository.AddAsync(inventoryTransaction);
+
+
+                await _context.SaveChangesAsync();
+
+
+                await dbTransaction.CommitAsync();
+            }
+            catch
+            {
+                await dbTransaction.RollbackAsync();
+
+                throw;
+            }
+        }
+        public async Task<IEnumerable<ReservationResponse>>GetAllReservations()
+        {
+            var reservations =await _stockReservationRepository.GetAllAsync();
+
+            return reservations.Select(reservation =>
+                new ReservationResponse
+                {
+                    Id =
+                        reservation.Id,
+
+                    OrderId =
+                        reservation.OrderId,
+
+                    ProductId =
+                        reservation.ProductId,
+
+                    ProductName =
+                        reservation.Product.Name,
+
+                    WarehouseId =
+                        reservation.WarehouseId,
+
+                    WarehouseName =
+                        reservation.Warehouse.Name,
+
+                    Quantity =
+                        reservation.Quantity,
+
+                    ExpiresAt =
+                        reservation.ExpiresAt,
+
+                    Status =
+                        reservation.Status,
+
+                    CreatedAt =
+                        reservation.CreatedAt
+                });
+        }
+
+
+        public async Task<ReservationResponse?> GetByIdAsync(int id)
+        {
+            var reservation =await _stockReservationRepository.GetByIdWithDetailsAsync(id);
+
+            if (reservation == null)
+                return null;
+
+
+            return new ReservationResponse
+            {
+                Id =
+                    reservation.Id,
+
+                OrderId =
+                    reservation.OrderId,
+
+                ProductId =
+                    reservation.ProductId,
+
+                ProductName =
+                    reservation.Product.Name,
+
+                WarehouseId =
+                    reservation.WarehouseId,
+
+                WarehouseName =
+                    reservation.Warehouse.Name,
+
+                Quantity =
+                    reservation.Quantity,
+
+                ExpiresAt =
+                    reservation.ExpiresAt,
+
+                Status =
+                    reservation.Status,
+
+                CreatedAt =
+                    reservation.CreatedAt
+            };
+        }
+
+
+        public async Task<IEnumerable<ReservationResponse>>GetByOrderIdAsync(int orderId)
+        {
+            var reservations =await _stockReservationRepository.GetByOrderIdAsync(orderId);
+
+            return reservations.Select(reservation =>
+                new ReservationResponse
+                {
+                    Id =
+                        reservation.Id,
+
+                    OrderId =
+                        reservation.OrderId,
+
+                    ProductId =
+                        reservation.ProductId,
+
+                    ProductName =
+                        reservation.Product.Name,
+
+                    WarehouseId =
+                        reservation.WarehouseId,
+
+                    WarehouseName =
+                        reservation.Warehouse.Name,
+
+                    Quantity =
+                        reservation.Quantity,
+
+                    ExpiresAt =
+                        reservation.ExpiresAt,
+
+                    Status =
+                        reservation.Status,
+
+                    CreatedAt =
+                        reservation.CreatedAt
+                });
+        }
+    }
+}
