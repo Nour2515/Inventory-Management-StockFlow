@@ -1,4 +1,4 @@
-{
+﻿{
   "ConnectionStrings": {
     "DefaultConnection": "Server=NOURMOHMED\\PROJECTS;Database=StockFlowDb;Trusted_Connection=True;TrustServerCertificate=True;"
   },
@@ -19,5 +19,6 @@
   "Redis": {
     "ConnectionString": "localhost:6379",
     "InstanceName": "StockFlow:"
+  }
   }
 }

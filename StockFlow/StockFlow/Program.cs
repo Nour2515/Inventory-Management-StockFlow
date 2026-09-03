@@ -84,6 +84,16 @@ builder.Services
                 ClockSkew = TimeSpan.Zero
             };
     });
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration =
+        builder.Configuration["Redis:ConnectionString"];
+
+    options.InstanceName =
+        builder.Configuration["Redis:InstanceName"];
+});
+builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+
 
 builder.Services.AddAuthorization();
 builder.Services.AddOpenApi();

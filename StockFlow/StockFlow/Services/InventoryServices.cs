@@ -1,4 +1,6 @@
-﻿using StockFlow.DTOs.Inventory;
+﻿using Microsoft.Extensions.Caching.Distributed;
+using StockFlow.core;
+using StockFlow.DTOs.Inventory;
 using StockFlow.Interfaces;
 using StockFlow.IRepository;
 using StockFlow.Models;
@@ -10,15 +12,19 @@ namespace StockFlow.Services
         private readonly IInventoryRepository _inventoryRepository;
         private readonly IGenericRepository<Product> _productRepository;
         private readonly IGenericRepository<Warehouse> _warehouseRepository;
+        private readonly ICacheService _cacheService;
 
-        public InventoryServices(IInventoryRepository inventoryRepository, IGenericRepository<Product> productRepository, IGenericRepository<Warehouse> warehouseRepository)
+
+        public InventoryServices(IInventoryRepository inventoryRepository, IGenericRepository<Product> productRepository, IGenericRepository<Warehouse> warehouseRepository, ICacheService cacheService)
         {
             _inventoryRepository = inventoryRepository;
             _productRepository = productRepository;
             _warehouseRepository = warehouseRepository;
+            _cacheService = cacheService;
         }
+
         public async Task<InventoryResponse> CreateAsync(CreateInventoryRequest request)
-        {
+        { 
             var product = await _productRepository.GetByIdAsync(request.ProductId);
             if(product==null)
                 throw new Exception("product does not exist");
@@ -43,6 +49,7 @@ namespace StockFlow.Services
             };
             await _inventoryRepository.AddAsync(inventory);
             await _inventoryRepository.SaveChangesAsync();
+            await _cacheService.InvalidateInventoryCacheAsync(inventory);
             return new InventoryResponse {
                 Id = inventory.Id, 
                 ProductId = inventory.ProductId, 
@@ -63,9 +70,17 @@ namespace StockFlow.Services
         }
 
         public async Task<IEnumerable<InventoryResponse>> GetAllAsync()
-        { 
-            var Inventories= await _inventoryRepository.GetAllAsync();
-            return Inventories.Select(inventory => new InventoryResponse
+        {
+            //using Redis
+            var cacheKey = CacheKeys.InventoryAll;
+            var cachedInventories = await _cacheService.GetAsync<List<InventoryResponse>>(cacheKey);
+            if (cachedInventories != null)
+            {
+                return cachedInventories;
+            }
+            //Redis MISS
+            var Inventories = await _inventoryRepository.GetAllAsync();
+            var result= Inventories.Select(inventory => new InventoryResponse
             {
                 Id = inventory.Id,
                 ProductId = inventory.ProductId,
@@ -77,16 +92,26 @@ namespace StockFlow.Services
                 AvailableQuantity = inventory.OnHandQuantity - inventory.ReservedQuantity,
                 ReorderLevel = inventory.ReorderLevel,
                 UpdatedAt = inventory.UpdatedAt
-            });
+            }).ToList();
+        await _cacheService.SetAsync(cacheKey,result, TimeSpan.FromMinutes(5));
+
+            return result;
         }
 
         public async Task<InventoryResponse?> GetByIdAsync(int id)
         {
+            var cacheKey = CacheKeys.InventoryById(id);
+            var cachedInventory = await _cacheService.GetAsync<InventoryResponse>(cacheKey);
+            if (cachedInventory != null)
+            {
+                return cachedInventory;
+            }
+
             var inventory = await _inventoryRepository.GetByIdAsync(id);
             if (inventory == null)
                 return null;
 
-            return new InventoryResponse
+            var result = new InventoryResponse
             {
                 Id = inventory.Id,
                 ProductId = inventory.ProductId,
@@ -99,6 +124,9 @@ namespace StockFlow.Services
                 ReorderLevel = inventory.ReorderLevel,
                 UpdatedAt = inventory.UpdatedAt
             };
+            await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(5));
+
+            return result;
         }
 
         public async Task<InventoryResponse?> UpdateAsync(int id, UpdateInventoryRequest request)
@@ -112,6 +140,8 @@ namespace StockFlow.Services
             inventory.UpdatedAt = DateTime.UtcNow;
             _inventoryRepository.Update(inventory);
             await _inventoryRepository.SaveChangesAsync();
+            //cache Invalidation
+            await _cacheService.InvalidateInventoryCacheAsync(inventory);
             return new InventoryResponse
             {
                 Id = inventory.Id,
@@ -130,9 +160,16 @@ namespace StockFlow.Services
       
         public async Task<List<InventoryResponse>> GetByWarehouseIdAsync(int warehouseId)
         {
+            var cacheKey = CacheKeys.InventoryByWarehouse(warehouseId);
+            var cachedInventories = await _cacheService.GetAsync<List<InventoryResponse>>(cacheKey);
+            if (cachedInventories != null)
+            {
+                return cachedInventories;
+            }
+
             var inventories = await _inventoryRepository.GetByWarehouseIdAsync(warehouseId);
 
-            return inventories.Select(inventory => new InventoryResponse
+            var result = inventories.Select(inventory => new InventoryResponse
             {
                 Id = inventory.Id,
                 ProductId = inventory.ProductId,
@@ -148,12 +185,19 @@ namespace StockFlow.Services
                 UpdatedAt = inventory.UpdatedAt
             
             }).ToList();
-                    }
+
+            await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(5));
+
+            return result;
+        }
         public async Task<List<InventoryResponse>> GetByproductIdAsync(int ProductId)
         {
+            var cacheKey = CacheKeys.InventoryByProduct(ProductId);
+            var cachedInventories = await _cacheService.GetAsync<List<InventoryResponse>>(cacheKey);
+            if (cachedInventories != null) { return cachedInventories; }
             var inventories = await _inventoryRepository.GetByProductIdAsync(ProductId);
 
-            return inventories.Select(inventory => new InventoryResponse
+            var result = inventories.Select(inventory => new InventoryResponse
             {
                 Id = inventory.Id,
 
@@ -172,6 +216,9 @@ namespace StockFlow.Services
                 UpdatedAt = inventory.UpdatedAt
 
             }).ToList();
+            await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(5));
+
+            return result;
         }
 
         public async Task<StockAvailabilityResponse> CheckAvailabilityAsync(int productId, int warehouseId, int quantity) {
@@ -195,8 +242,10 @@ namespace StockFlow.Services
             };
 
         }
-
+     
         }
-}
+
+    }
+
     
 

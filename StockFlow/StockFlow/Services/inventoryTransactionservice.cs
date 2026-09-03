@@ -1,9 +1,11 @@
-﻿using StockFlow.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using StockFlow.Data;
 using StockFlow.DTOs.Transaction;
 using StockFlow.Interfaces;
 using StockFlow.IRepository;
 using StockFlow.Models;
 using StockFlow.Models.Enums;
+using System.Runtime.CompilerServices;
 
 namespace StockFlow.Services
 {
@@ -13,14 +15,17 @@ namespace StockFlow.Services
         private readonly IInventoryRepository _inventoryRepository;
         private readonly IProductRepository _productRepository;
         private readonly IGenericRepository<Warehouse> _warehouseRepository;
+        private readonly ICacheService _cacheService;
+
         private readonly AppDbContext _context;
 
-        public inventoryTransactionservice(IInventoryTransactionRepo transactionRepository,IInventoryRepository inventoryRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,AppDbContext context)
+        public inventoryTransactionservice(IInventoryTransactionRepo transactionRepository,IInventoryRepository inventoryRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,ICacheService cacheService,AppDbContext context)
         {
             _transactionRepository = transactionRepository;
             _inventoryRepository = inventoryRepository;
             _productRepository = productRepository;
             _warehouseRepository = warehouseRepository;
+            _cacheService = cacheService;
             _context = context;
         }
 
@@ -213,6 +218,8 @@ namespace StockFlow.Services
             if (inventory == null)
                 throw new Exception("Inventory does not exist for this product and warehouse.");
 
+            InventoryTransaction? transaction = null;
+
             await using var dbTransaction =
                 await _context.Database.BeginTransactionAsync();
 
@@ -292,7 +299,7 @@ namespace StockFlow.Services
                 _inventoryRepository.Update(inventory);
 
 
-                var transaction =
+                transaction =
                     new InventoryTransaction
                     {
                         ProductId =
@@ -321,35 +328,13 @@ namespace StockFlow.Services
 
                 await dbTransaction.CommitAsync();
 
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await dbTransaction.RollbackAsync();
 
-                return new InventoryTransactionResponse
-                {
-                    Id = transaction.Id,
-
-                    ProductId =
-                        transaction.ProductId,
-
-                    ProductName =
-                        product.Name,
-
-                    WarehouseId =
-                        transaction.WarehouseId,
-
-                    WarehouseName =
-                        warehouse.Name,
-
-                    Quantity =
-                        transaction.Quantity,
-
-                    Type =
-                        transaction.Type,
-
-                    Reference =
-                        transaction.ReferenceId,
-
-                    CreatedAt =
-                        transaction.CreatedAt
-                };
+                throw new Exception(
+                    "Inventory was modified by another request. Please try again.");
             }
             catch
             {
@@ -357,6 +342,37 @@ namespace StockFlow.Services
 
                 throw;
             }
+            await _cacheService.InvalidateInventoryCacheAsync(inventory);
+
+            return new InventoryTransactionResponse
+            {
+                Id = transaction.Id,
+
+                ProductId =
+                       transaction.ProductId,
+
+                ProductName =
+                       product.Name,
+
+                WarehouseId =
+                       transaction.WarehouseId,
+
+                WarehouseName =
+                       warehouse.Name,
+
+                Quantity =
+                       transaction.Quantity,
+
+                Type =
+                       transaction.Type,
+
+                Reference =
+                       transaction.ReferenceId,
+
+                CreatedAt =
+                       transaction.CreatedAt
+            };
+
         }
     }
 }

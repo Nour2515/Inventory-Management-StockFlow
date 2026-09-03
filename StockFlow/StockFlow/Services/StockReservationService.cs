@@ -1,4 +1,5 @@
-﻿using StockFlow.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using StockFlow.Data;
 using StockFlow.DTOs.Reservation;
 using StockFlow.Interfaces;
 using StockFlow.IRepository;
@@ -21,11 +22,12 @@ namespace StockFlow.Services
         private readonly IInventoryRepository _inventoryrepo;
 
         private readonly IInventoryTransactionRepo _transactionRepository;
+        private readonly ICacheService _cacheService;
 
         private readonly AppDbContext _context;
 
 
-        public StockReservationService(IStockReservationRepository stockReservationRepository,IOrderRepo orderRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,IInventoryRepository inventoryRepository,IInventoryTransactionRepo transactionRepository,AppDbContext context)
+        public StockReservationService(IStockReservationRepository stockReservationRepository,IOrderRepo orderRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,IInventoryRepository inventoryRepository,IInventoryTransactionRepo transactionRepository,ICacheService cacheService,AppDbContext context)
         {
             _stockReservationRepository =stockReservationRepository;
 
@@ -38,6 +40,7 @@ namespace StockFlow.Services
             _inventoryrepo =inventoryRepository;
 
             _transactionRepository =transactionRepository;
+            _cacheService =cacheService;
 
             _context =context;
         }
@@ -84,13 +87,15 @@ namespace StockFlow.Services
             {
                 throw new Exception($"Insufficient quantity. Available quantity is: {availableQuantity}");
             }
+
+            StockReservation? stockReservation = null;
             //Transaction 
             await using var dbTransaction =await _context.Database.BeginTransactionAsync();
 
             try
             { 
                 //process 1
-                var stockReservation =new StockReservation
+                stockReservation =new StockReservation
                     {
                         OrderId =request.OrderId,
 
@@ -137,28 +142,14 @@ namespace StockFlow.Services
                 await dbTransaction.CommitAsync();
 
 
-                return new ReservationResponse
-                {
-                    Id =stockReservation.Id,
+              
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await dbTransaction.RollbackAsync();
 
-                    OrderId =stockReservation.OrderId,
-
-                    ProductId =stockReservation.ProductId,
-
-                    ProductName =product.Name,
-
-                    WarehouseId =stockReservation.WarehouseId,
-
-                    WarehouseName =warehouse.Name,
-
-                    Quantity =stockReservation.Quantity,
-
-                    ExpiresAt =stockReservation.ExpiresAt,
-
-                    Status =stockReservation.Status,
-
-                    CreatedAt =stockReservation.CreatedAt
-                };
+                throw new Exception(
+                    "Inventory was modified by another request. Please try again.");
             }
             catch
             {
@@ -166,6 +157,32 @@ namespace StockFlow.Services
 
                 throw;
             }
+
+            await _cacheService.InvalidateInventoryCacheAsync(inventory);
+
+            return new ReservationResponse
+            {
+                Id = stockReservation.Id,
+
+                OrderId = stockReservation.OrderId,
+
+                ProductId = stockReservation.ProductId,
+
+                ProductName = product.Name,
+
+                WarehouseId = stockReservation.WarehouseId,
+
+                WarehouseName = warehouse.Name,
+
+                Quantity = stockReservation.Quantity,
+
+                ExpiresAt = stockReservation.ExpiresAt,
+
+                Status = stockReservation.Status,
+
+                CreatedAt = stockReservation.CreatedAt
+            };
+
         }
 
         public async Task CancelAsync(int id)
@@ -241,12 +258,20 @@ namespace StockFlow.Services
 
                 await dbTransaction.CommitAsync();
             }
+            catch (DbUpdateConcurrencyException)
+            {
+                await dbTransaction.RollbackAsync();
+
+                throw new Exception(
+                    "Inventory was modified by another request. Please try again.");
+            }
             catch
             {
                 await dbTransaction.RollbackAsync();
 
                 throw;
             }
+            await _cacheService.InvalidateInventoryCacheAsync(inventory);
         }
 
         public async Task ReleaseAsync(int id)
@@ -321,12 +346,20 @@ namespace StockFlow.Services
 
                 await dbTransaction.CommitAsync();
             }
+            catch (DbUpdateConcurrencyException)
+            {
+                await dbTransaction.RollbackAsync();
+
+                throw new Exception(
+                    "Inventory was modified by another request. Please try again.");
+            }
             catch
             {
                 await dbTransaction.RollbackAsync();
 
                 throw;
             }
+            await _cacheService.InvalidateInventoryCacheAsync(inventory);
         }
         public async Task<IEnumerable<ReservationResponse>>GetAllReservations()
         {
