@@ -3,6 +3,7 @@ using StockFlow.DTOs.Transaction;
 using StockFlow.Interfaces;
 using StockFlow.Models.Enums;
 using StockFlow.Services;
+using System.Security.Claims;
 
 namespace StockFlow.Controllers;
 
@@ -32,7 +33,14 @@ public class InventoryTransactionsController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var transaction =await _inventoryTransactionservice.ProcessTransactionAsync(request);
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim))
+            return Unauthorized();
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var transaction = await _inventoryTransactionservice.ProcessTransactionAsync(request, userId);
+
 
         return Ok(transaction);
     }

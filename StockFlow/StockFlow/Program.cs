@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StockFlow.Data;
+using StockFlow.Hubs;
 using StockFlow.Interfaces;
 using StockFlow.IRepository;
 using StockFlow.Models;
@@ -49,6 +50,8 @@ builder.Services.AddScoped<IinventoryTransactionservice, inventoryTransactionser
 
 builder.Services.AddScoped<IAuthService, AuthServices>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+
+builder.Services.AddSignalR();
 builder.Services
     .AddAuthentication(options =>
     {
@@ -105,6 +108,8 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+app.MapHub<InventoryHub>("/hubs/inventory");
 
 app.UseHttpsRedirection();
 

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StockFlow.DTOs.Reservation;
 using StockFlow.Interfaces;
+using System.Security.Claims;
 
 namespace StockFlow.Controllers;
 
@@ -35,22 +36,36 @@ public class StockReservationsController : ControllerBase
     public async Task<IActionResult> CreateResevation([FromBody] CreateReservationRequest request) {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
-        var reservation=await _stockReservationService.CreateAsync(request);
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim))
+            return Unauthorized();
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+        var reservation=await _stockReservationService.CreateAsync(request, userId);
         return Ok(reservation);
     }
     [HttpPut("{id:int}/release")]
     [Authorize(Roles = "Admin,InventoryManager")]
     public async Task<IActionResult> Release(int id)
     {
-        await _stockReservationService.
-            ReleaseAsync(id);
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim))
+            return Unauthorized();
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+        await _stockReservationService.ReleaseAsync(id, userId);
         return NoContent();
     }
 
-    [HttpPut("{id:int}/cancel")]
+    [HttpPut("cancel/{id:int}")]
     [Authorize(Roles = "Admin,InventoryManager")] 
-    public async Task<IActionResult> Cancel(int id) { 
-        await _stockReservationService.CancelAsync(id); 
+    public async Task<IActionResult> Cancel(int id) {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdClaim))
+            return Unauthorized();
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+        await _stockReservationService.CancelAsync(id,userId); 
         return NoContent();
     }
 

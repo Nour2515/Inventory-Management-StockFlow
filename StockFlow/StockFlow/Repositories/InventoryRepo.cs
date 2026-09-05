@@ -22,6 +22,18 @@ namespace StockFlow.Repositories
                 .Include(i => i.Warehouse)
                 .ToListAsync();
         }
+
+        public async Task<Inventory?> GetAvailableInventoryAsync(int productId, int quantity)
+        {
+            return await _context.Inventories.Include(i => i.Warehouse).Where(i =>
+            i.ProductId == productId &&
+            i.Warehouse.IsActive &&
+            (i.OnHandQuantity - i.ReservedQuantity) >= quantity)
+            .OrderByDescending(i =>
+            i.OnHandQuantity - i.ReservedQuantity)
+            .FirstOrDefaultAsync();
+        }
+
         public override async Task<Inventory?> GetByIdAsync(int id)
         {
             return await _context.Inventories .AsNoTracking().Include(i => i.Product).Include(i => i.Warehouse).FirstOrDefaultAsync(i=>i.Id == id);

@@ -10,14 +10,11 @@ namespace StockFlow.Services
     public class RedisCacheService : ICacheService
     {
         private readonly IDistributedCache _cache;
-        private readonly RedisCacheService _redisCacheService;
         private readonly JsonSerializerOptions _jsonOptions;
-        public RedisCacheService(IDistributedCache cache, RedisCacheService redisCacheService)
+        public RedisCacheService(IDistributedCache cache)
         {
             _cache = cache;
-            _redisCacheService = redisCacheService;
             // Configure JSON serialization options 
-            //here we are configuring the JSON serialization options to be case-insensitive and to handle enum serialization as strings. This is important because when we serialize and deserialize objects to and from Redis, we want to ensure that the property names are matched correctly regardless of their casing, and that enums are represented as their string values rather than their underlying integer values.
             _jsonOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -29,7 +26,6 @@ namespace StockFlow.Services
         {
 
             var cachedData = await _cache.GetStringAsync(key);
-            // Cache miss
             //default return null for Dtos and default value for value types
             if (string.IsNullOrEmpty(cachedData))
                 return default;

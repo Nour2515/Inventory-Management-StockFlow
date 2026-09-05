@@ -11,6 +11,6 @@ namespace StockFlow.Interfaces
         Task<IEnumerable<InventoryTransactionResponse>> GetByWarehouseIdAsync(int warehouseId);
         Task<IEnumerable<InventoryTransactionResponse>> GetByProductAndWarehouseAsync(int productId, int warehouseId);
         Task<IEnumerable<InventoryTransactionResponse>> GetByTypeAsync(InventoryTransactionType type);
-        Task<InventoryTransactionResponse> ProcessTransactionAsync(CreateInventoryTransactionRequest request);
+        Task<InventoryTransactionResponse> ProcessTransactionAsync(CreateInventoryTransactionRequest request,int userId);
     }
 }

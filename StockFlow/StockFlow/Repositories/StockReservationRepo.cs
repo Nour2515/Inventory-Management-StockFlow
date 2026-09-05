@@ -39,12 +39,29 @@ namespace StockFlow.Repositories
                 .ToListAsync(); 
         }
         public async Task<List<StockReservation>> GetActiveByOrderIdAsync(int orderId)
-        { 
-            return await _context.StockReservations.
-                Where(r => r.OrderId == orderId && r.Status == ReservationStatus.Active).
-                Include(r => r.Product).
-                Include(r => r.Warehouse).
-                ToListAsync();
+        {
+            //Expired At
+            var now = DateTime.UtcNow;
+
+            return await _context.StockReservations
+                .Where(r =>
+                    r.OrderId == orderId &&
+                    r.Status == ReservationStatus.Active &&
+                    r.ExpiresAt > now)
+                .Include(r => r.Product)
+                .Include(r => r.Warehouse)
+                .ToListAsync();
+        }
+
+        public async Task<List<StockReservation>> GetExpiredActiveAsync()
+        {
+            var now = DateTime.UtcNow;
+
+            return await _context.StockReservations
+                .Where(r =>
+                    r.Status == ReservationStatus.Active &&
+                    r.ExpiresAt <= now)
+                .ToListAsync();
         }
     }
 }

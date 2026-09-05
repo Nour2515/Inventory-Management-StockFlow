@@ -59,8 +59,11 @@ public class OrdersController : ControllerBase
     public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateOrderStatusRequest request) 
     { 
         if (!ModelState.IsValid) 
-            return BadRequest(ModelState); 
-        var order = await _orderServices.UpdateAsync(id, request);
+            return BadRequest(ModelState);
+        var user_Id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(user_Id)) return Unauthorized();
+        if (!int.TryParse(user_Id, out var userId)) return Unauthorized();
+        var order = await _orderServices.UpdateAsync(id, request,userId);
         return Ok(order);
     }
 }

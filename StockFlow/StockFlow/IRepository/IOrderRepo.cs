@@ -8,5 +8,8 @@ namespace StockFlow.IRepository
         Task<List<Order>> GetByUserIdAsync(int id);
 
         Task <List<Order>>GetOrderWithItemsAsync();
+
+        Task<Order?> GetByIdWithItemsAsync(int id);
+
     }
 }

@@ -1,11 +1,14 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using StockFlow.Data;
 using StockFlow.DTOs.Reservation;
+using StockFlow.DTOs.SignalR;
+using StockFlow.Hubs;
 using StockFlow.Interfaces;
 using StockFlow.IRepository;
 using StockFlow.Models;
 using StockFlow.Models.Enums;
-using System.Diagnostics;
+
 
 namespace StockFlow.Services
 {
@@ -23,11 +26,11 @@ namespace StockFlow.Services
 
         private readonly IInventoryTransactionRepo _transactionRepository;
         private readonly ICacheService _cacheService;
-
+        private readonly IHubContext<InventoryHub> _hubContext;
         private readonly AppDbContext _context;
 
 
-        public StockReservationService(IStockReservationRepository stockReservationRepository,IOrderRepo orderRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,IInventoryRepository inventoryRepository,IInventoryTransactionRepo transactionRepository,ICacheService cacheService,AppDbContext context)
+        public StockReservationService(IStockReservationRepository stockReservationRepository,IOrderRepo orderRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,IInventoryRepository inventoryRepository,IInventoryTransactionRepo transactionRepository,ICacheService cacheService,AppDbContext context,IHubContext<InventoryHub> hubContext)
         {
             _stockReservationRepository =stockReservationRepository;
 
@@ -41,23 +44,59 @@ namespace StockFlow.Services
 
             _transactionRepository =transactionRepository;
             _cacheService =cacheService;
-
+            _hubContext =hubContext;
             _context =context;
         }
 
 
-        public async Task<ReservationResponse> CreateAsync(CreateReservationRequest request)
+        public async Task<ReservationResponse> CreateAsync(CreateReservationRequest request ,int userId)
         {
             if (request.Quantity <= 0)
             {
-                throw new Exception(
-                    "Quantity must be greater than zero.");
+                throw new Exception("Quantity must be greater than zero.");
             }
 
             var order = await _orderRepo.GetByIdAsync(request.OrderId);
 
             if (order == null)
                 throw new Exception("Order not found.");
+
+            if (order.Status == OrderStatus.Completed ||
+       order.Status == OrderStatus.Cancelled)
+            {
+                throw new Exception( $"Cannot create reservation for " +$"{order.Status} order.");
+            }
+
+
+           //product must belong to it
+
+            var orderItem =order.OrderItems.FirstOrDefault(i =>i.ProductId == request.ProductId);
+
+            if (orderItem == null)
+            {
+                throw new Exception("Product does not belong to this order.");
+            }
+
+
+           
+            // PREVENT EXCESS RESERVATION
+
+            var activeReservations = await _stockReservationRepository
+                    .GetActiveByOrderIdAsync(order.Id);
+             
+            var alreadyReservedQuantity =activeReservations
+                    .Where(r =>r.ProductId == request.ProductId)
+                    .Sum(r => r.Quantity);
+
+
+            var remainingQuantity =orderItem.Quantity -alreadyReservedQuantity;
+
+
+            if (request.Quantity > remainingQuantity)
+            {
+                throw new Exception($"Reservation quantity exceeds order quantity. " +$"Remaining quantity: {remainingQuantity}.");
+            }
+
 
             var product =await _productrepo.GetByIdAsync(request.ProductId);
 
@@ -87,7 +126,6 @@ namespace StockFlow.Services
             {
                 throw new Exception($"Insufficient quantity. Available quantity is: {availableQuantity}");
             }
-
             StockReservation? stockReservation = null;
             //Transaction 
             await using var dbTransaction =await _context.Database.BeginTransactionAsync();
@@ -120,6 +158,8 @@ namespace StockFlow.Services
                 inventory.UpdatedAt =DateTime.UtcNow;
 
                 _inventoryrepo.Update(inventory);
+
+
                 //Process 3
                 var inventoryTransaction =new InventoryTransaction
                     {
@@ -131,8 +171,10 @@ namespace StockFlow.Services
 
                         Type =InventoryTransactionType.Reservation,
 
-                        CreatedAt =DateTime.UtcNow
-                    };
+                        CreatedAt =DateTime.UtcNow,
+
+                        CreatedByUserId=userId
+                };
 
 
                 await _transactionRepository.AddAsync(inventoryTransaction);
@@ -154,11 +196,63 @@ namespace StockFlow.Services
             catch
             {
                 await dbTransaction.RollbackAsync();
-
                 throw;
             }
 
             await _cacheService.InvalidateInventoryCacheAsync(inventory);
+            await _hubContext.Clients.All.SendAsync(
+             "InventoryUpdated",
+             new InventoryUpdatedEvent
+             {
+                 InventoryId = inventory.Id,
+
+                 ProductId = inventory.ProductId,
+
+                 WarehouseId = inventory.WarehouseId,
+
+                 OnHandQuantity =
+                     inventory.OnHandQuantity,
+
+                 ReservedQuantity =
+                     inventory.ReservedQuantity,
+
+                 AvailableQuantity =
+                     inventory.OnHandQuantity -
+                     inventory.ReservedQuantity,
+
+                 Reason = "Reservation"
+    });
+
+            var updatedAvailableQuantity =inventory.OnHandQuantity -inventory.ReservedQuantity;
+
+            if (updatedAvailableQuantity <= inventory.ReorderLevel)
+            {
+                await _hubContext.Clients.All.SendAsync(
+                    "LowStockAlert",
+                    new
+                    {
+                        InventoryId =
+                            inventory.Id,
+
+                        ProductId =
+                            inventory.ProductId,
+
+                        ProductName =
+                            product.Name,
+
+                        WarehouseId =
+                            inventory.WarehouseId,
+
+                        WarehouseName =
+                            warehouse.Name,
+
+                        AvailableQuantity =
+                            updatedAvailableQuantity,
+
+                        ReorderLevel =
+                            inventory.ReorderLevel
+                    });
+            }
 
             return new ReservationResponse
             {
@@ -185,7 +279,7 @@ namespace StockFlow.Services
 
         }
 
-        public async Task CancelAsync(int id)
+        public async Task CancelAsync(int id, int userId)
         {
             var reservation =await _stockReservationRepository.GetByIdWithDetailsAsync(id);
 
@@ -246,7 +340,10 @@ namespace StockFlow.Services
                                 .ReservationReleased,
 
                         CreatedAt =
-                            DateTime.UtcNow
+                            DateTime.UtcNow,
+
+                            CreatedByUserId=userId
+
                     };
 
 
@@ -272,9 +369,32 @@ namespace StockFlow.Services
                 throw;
             }
             await _cacheService.InvalidateInventoryCacheAsync(inventory);
+
+            await _hubContext.Clients.All.SendAsync(
+              "InventoryUpdated",
+              new InventoryUpdatedEvent
+              {
+                  InventoryId = inventory.Id,
+
+                  ProductId = inventory.ProductId,
+
+                  WarehouseId = inventory.WarehouseId,
+
+                  OnHandQuantity =
+                      inventory.OnHandQuantity,
+
+                  ReservedQuantity =
+                      inventory.ReservedQuantity,
+
+                  AvailableQuantity =
+                      inventory.OnHandQuantity -
+                      inventory.ReservedQuantity,
+
+                  Reason = "ReservationCancelled"
+              });
         }
 
-        public async Task ReleaseAsync(int id)
+        public async Task ReleaseAsync(int id, int userId)
         {
             var reservation = await _stockReservationRepository.GetByIdWithDetailsAsync(id);
 
@@ -334,7 +454,9 @@ namespace StockFlow.Services
                                 .ReservationReleased,
 
                         CreatedAt =
-                            DateTime.UtcNow
+                            DateTime.UtcNow,
+                        CreatedByUserId = userId
+
                     };
 
 
@@ -360,6 +482,31 @@ namespace StockFlow.Services
                 throw;
             }
             await _cacheService.InvalidateInventoryCacheAsync(inventory);
+
+            await _hubContext.Clients.All.SendAsync(
+                 "InventoryUpdated",
+                 new InventoryUpdatedEvent
+                 {
+                     InventoryId = inventory.Id,
+
+                     ProductId = inventory.ProductId,
+
+                     WarehouseId = inventory.WarehouseId,
+
+                     OnHandQuantity =
+                         inventory.OnHandQuantity,
+
+                     ReservedQuantity =
+                         inventory.ReservedQuantity,
+
+                     AvailableQuantity =
+                         inventory.OnHandQuantity -
+                         inventory.ReservedQuantity,
+
+                     Reason = "ReservationReleased"
+                 });
+
+
         }
         public async Task<IEnumerable<ReservationResponse>>GetAllReservations()
         {
@@ -481,6 +628,75 @@ namespace StockFlow.Services
                     CreatedAt =
                         reservation.CreatedAt
                 });
+        }
+
+
+        public async Task ExpireReservationsAsync()
+        {
+            var expiredReservations =await _stockReservationRepository.GetExpiredActiveAsync();
+
+            if (expiredReservations.Count == 0)
+                return;
+
+            await using var dbTransaction =await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                foreach (var reservation in expiredReservations)
+                {
+                    var inventory =await _inventoryrepo.GetByProductAndWarehouseAsync(reservation.ProductId,reservation.WarehouseId);
+
+                    if (inventory == null)
+                    {
+                        throw new Exception("Inventory not found.");
+                    }
+
+
+                    if (inventory.ReservedQuantity < reservation.Quantity)
+                    {
+                        throw new Exception("Reserved quantity is invalid.");
+                    }
+
+
+                    inventory.ReservedQuantity -= reservation.Quantity;
+
+                    inventory.UpdatedAt =DateTime.UtcNow;
+
+
+                    reservation.Status =ReservationStatus.Expired;
+
+
+                    _inventoryrepo.Update(inventory);
+
+                    _stockReservationRepository.Update(reservation);
+                }
+
+                await _context.SaveChangesAsync();
+
+                await dbTransaction.CommitAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await dbTransaction.RollbackAsync();
+
+                throw new Exception("Inventory was modified by another request. " + "Please try again.");
+            }
+            catch
+            {
+                await dbTransaction.RollbackAsync();
+                throw;
+            }
+
+
+            foreach (var reservation in expiredReservations)
+            {
+                var inventory =await _inventoryrepo.GetByProductAndWarehouseAsync(reservation.ProductId,reservation.WarehouseId);
+
+                if (inventory != null)
+                {
+                    await _cacheService.InvalidateInventoryCacheAsync(inventory);
+                }
+            }
         }
     }
 }

@@ -10,5 +10,9 @@ namespace StockFlow.IRepository
         Task<List<Inventory>> GetByWarehouseIdAsync(int warehouseId);
         Task<Inventory> GetByProductAndWarehouseAsync(int productId, int warehouseId);
 
+        Task<Inventory?> GetAvailableInventoryAsync(int productId,int quantity);
+
+    
+
     }
 }

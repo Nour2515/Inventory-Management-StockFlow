@@ -1,6 +1,9 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using StockFlow.Data;
+using StockFlow.DTOs.SignalR;
 using StockFlow.DTOs.Transaction;
+using StockFlow.Hubs;
 using StockFlow.Interfaces;
 using StockFlow.IRepository;
 using StockFlow.Models;
@@ -17,9 +20,10 @@ namespace StockFlow.Services
         private readonly IGenericRepository<Warehouse> _warehouseRepository;
         private readonly ICacheService _cacheService;
 
+        private readonly IHubContext<InventoryHub> _hubContext;
         private readonly AppDbContext _context;
 
-        public inventoryTransactionservice(IInventoryTransactionRepo transactionRepository,IInventoryRepository inventoryRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,ICacheService cacheService,AppDbContext context)
+        public inventoryTransactionservice(IInventoryTransactionRepo transactionRepository,IInventoryRepository inventoryRepository,IProductRepository productRepository,IGenericRepository<Warehouse> warehouseRepository,ICacheService cacheService,AppDbContext context,IHubContext<InventoryHub> hubContext)
         {
             _transactionRepository = transactionRepository;
             _inventoryRepository = inventoryRepository;
@@ -27,6 +31,7 @@ namespace StockFlow.Services
             _warehouseRepository = warehouseRepository;
             _cacheService = cacheService;
             _context = context;
+            _hubContext = hubContext;
         }
 
 
@@ -192,7 +197,7 @@ namespace StockFlow.Services
                 });
         }
 
-        public async Task<InventoryTransactionResponse>ProcessTransactionAsync(CreateInventoryTransactionRequest request)
+        public async Task<InventoryTransactionResponse>ProcessTransactionAsync(CreateInventoryTransactionRequest request,int userId)
         {
             if (request.Quantity <= 0)
                 throw new Exception( "Quantity must be greater than zero.");
@@ -318,7 +323,10 @@ namespace StockFlow.Services
                             request.Reference,
 
                         CreatedAt =
-                            DateTime.UtcNow
+                            DateTime.UtcNow,
+
+                        CreatedByUserId=userId
+
                     };
 
 
@@ -343,6 +351,47 @@ namespace StockFlow.Services
                 throw;
             }
             await _cacheService.InvalidateInventoryCacheAsync(inventory);
+
+            await _hubContext.Clients.All.SendAsync(
+                  "InventoryUpdated",
+                  new InventoryUpdatedEvent
+                  {
+                      InventoryId = inventory.Id,
+
+                      ProductId = inventory.ProductId,
+
+                      WarehouseId = inventory.WarehouseId,
+
+                      OnHandQuantity =inventory.OnHandQuantity,
+
+                      ReservedQuantity =inventory.ReservedQuantity,
+
+                      AvailableQuantity =inventory.OnHandQuantity -inventory.ReservedQuantity,
+
+                      Reason =request.Type.ToString()
+                  });
+            //Low Stock
+            var availableQuantity =inventory.OnHandQuantity -inventory.ReservedQuantity;
+
+            if (availableQuantity <= inventory.ReorderLevel)
+            {
+                await _hubContext.Clients.All.SendAsync(
+                    "LowStockAlert",
+                    new
+                    {
+                        InventoryId = inventory.Id,
+
+                        ProductId = inventory.ProductId,
+                        ProductName = product.Name,
+
+                        WarehouseId = inventory.WarehouseId,
+                        WarehouseName = warehouse.Name,
+
+                        AvailableQuantity = availableQuantity,
+
+                        ReorderLevel = inventory.ReorderLevel
+                    });
+            }
 
             return new InventoryTransactionResponse
             {

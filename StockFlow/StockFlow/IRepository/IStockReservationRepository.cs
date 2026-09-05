@@ -8,5 +8,7 @@ namespace StockFlow.IRepository
         Task<List<StockReservation>> GetByOrderIdAsync(int orderId); 
         Task<List<StockReservation>> GetActiveByProductAndWarehouseAsync(int productId, int warehouseId);
         Task<List<StockReservation>> GetActiveByOrderIdAsync(int orderId);
+        Task<List<StockReservation>> GetExpiredActiveAsync();
+
     }
 }
