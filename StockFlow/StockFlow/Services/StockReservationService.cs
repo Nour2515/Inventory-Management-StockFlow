@@ -638,6 +638,8 @@ namespace StockFlow.Services
             if (expiredReservations.Count == 0)
                 return;
 
+            var changedInventories = new List<Inventory>();
+
             await using var dbTransaction =await _context.Database.BeginTransactionAsync();
 
             try
@@ -657,7 +659,7 @@ namespace StockFlow.Services
                         throw new Exception("Reserved quantity is invalid.");
                     }
 
-
+                    //release stock
                     inventory.ReservedQuantity -= reservation.Quantity;
 
                     inventory.UpdatedAt =DateTime.UtcNow;
@@ -669,6 +671,9 @@ namespace StockFlow.Services
                     _inventoryrepo.Update(inventory);
 
                     _stockReservationRepository.Update(reservation);
+
+                    changedInventories.Add(inventory);
+
                 }
 
                 await _context.SaveChangesAsync();

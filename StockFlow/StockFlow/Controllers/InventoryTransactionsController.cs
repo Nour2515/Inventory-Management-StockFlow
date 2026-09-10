@@ -63,8 +63,7 @@ public class InventoryTransactionsController : ControllerBase
 
 
     [HttpGet("product/{productId:int}/warehouse/{warehouseId:int}")]
-    public async Task<IActionResult>
-        GetByProductAndWarehouse(int productId,int warehouseId)
+    public async Task<IActionResult> GetByProductAndWarehouse(int productId,int warehouseId)
     {
         var transactions =await _inventoryTransactionservice.GetByProductAndWarehouseAsync(productId,warehouseId);
 

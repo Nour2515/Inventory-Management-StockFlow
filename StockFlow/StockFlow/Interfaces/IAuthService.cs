@@ -11,5 +11,8 @@ namespace StockFlow.Interfaces
         Task<AuthResponse> RefreshTokenAsync(string refreshToken);
 
         Task RevokeTokenAsync(string refreshToken);
+
+        Task CleanupRefreshTokensAsync();
+
     }
 }

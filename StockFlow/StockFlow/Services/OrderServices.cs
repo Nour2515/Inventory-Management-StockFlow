@@ -37,7 +37,7 @@ namespace StockFlow.Services
         }
         //userid will get it from claims
         public async Task<OrderResponse> CreateAsync(CreateOrderRequest request, int userid)
-        {
+        {   
             if (request.Items == null || request.Items.Count == 0)
                 throw new Exception("Order must contain at least one item.");
             if (request.Items.GroupBy(i => i.ProductId).Any(g => g.Count() > 1))

@@ -1,3 +1,4 @@
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -6,14 +7,18 @@ using StockFlow.Data;
 using StockFlow.Hubs;
 using StockFlow.Interfaces;
 using StockFlow.IRepository;
+using StockFlow.Jobs;
 using StockFlow.Models;
 using StockFlow.Repositories;
 using StockFlow.Services;
 using System.Text;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+
+var connectionString =builder.Configuration.GetConnectionString("DefaultConnection");
 
 builder.Services.AddControllers();
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -52,6 +57,22 @@ builder.Services.AddScoped<IAuthService, AuthServices>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 
 builder.Services.AddSignalR();
+
+builder.Services.AddHangfire(config =>
+{
+    config
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UseSqlServerStorage(connectionString);
+});
+
+
+builder.Services.AddHangfireServer();
+
+
+builder.Services.AddScoped<ReservationExpirationJob>();
+builder.Services.AddScoped<RefreshTokenCleanupJob>();
+
 builder.Services
     .AddAuthentication(options =>
     {
@@ -108,6 +129,7 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+app.UseHangfireDashboard("/hangfire");
 
 app.MapHub<InventoryHub>("/hubs/inventory");
 
@@ -119,4 +141,12 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+var recurringJobManager =app.Services.GetRequiredService<IRecurringJobManager>();
+
+recurringJobManager.AddOrUpdate<ReservationExpirationJob>(
+    "reservation-expiration",
+    job => job.RunAsync(),
+    Cron.Minutely
+);
+recurringJobManager.AddOrUpdate<RefreshTokenCleanupJob>("refresh-token-cleanup",job => job.RunAsync(),Cron.Daily);
 app.Run();

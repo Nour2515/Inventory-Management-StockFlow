@@ -47,7 +47,9 @@ namespace StockFlow.Services
             //await _signInManager.SignInAsync(user, false);
 
             //default role is customer
-            await _userManager.AddToRoleAsync(user, "Customer");
+            var roleResult =await _userManager.AddToRoleAsync(user, "Customer"); 
+            if (!roleResult.Succeeded)
+                throw new Exception("Failed to assign default role.");
 
             var accessToken = _tokenService.GenerateAccessToken(user);
 
@@ -138,6 +140,26 @@ namespace StockFlow.Services
                 return;
 
             storedToken.RevokedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task CleanupRefreshTokensAsync()
+        {
+            var cutoffDate =DateTime.UtcNow.AddDays(-7);
+
+
+            var oldTokens = await _context.RefreshTokens
+                    .Where(rt =>rt.ExpiresAt <= cutoffDate||(rt.RevokedAt != null && rt.RevokedAt <= cutoffDate))
+                    .ToListAsync();
+
+
+            if (oldTokens.Count == 0)
+                return;
+
+
+            _context.RefreshTokens.RemoveRange(oldTokens);
+
 
             await _context.SaveChangesAsync();
         }
