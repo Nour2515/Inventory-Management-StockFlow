@@ -34,8 +34,6 @@ public class WarehousesController : ControllerBase
     [HttpPost]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> CreateWarehouse(CreateWarehouseRequest request) {
-     if(!ModelState.IsValid)
-            return BadRequest(ModelState);
      var warehouse=await _warehouseService.CreateAsync(request);
         return CreatedAtAction(nameof(GetOneWarehouses), new { id = warehouse.Id }, warehouse);
     }
@@ -43,8 +41,6 @@ public class WarehousesController : ControllerBase
     [Authorize(Roles = "Admin,WarehouseManager")]
     public async Task<IActionResult> UpdateWarehouse(int id, UpdateWarehouseRequest request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
         var warehouse = await _warehouseService.UpdateAsync(id, request);
         return Ok(warehouse);
     }   

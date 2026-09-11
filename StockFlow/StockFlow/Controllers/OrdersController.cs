@@ -21,8 +21,6 @@ public class OrdersController : ControllerBase
     [Authorize(Roles = "Customer")]
     public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userIdClaim))
             return Unauthorized();
@@ -58,8 +56,6 @@ public class OrdersController : ControllerBase
     [Authorize(Roles = "Admin")] 
     public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateOrderStatusRequest request) 
     { 
-        if (!ModelState.IsValid) 
-            return BadRequest(ModelState);
         var user_Id = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(user_Id)) return Unauthorized();
         if (!int.TryParse(user_Id, out var userId)) return Unauthorized();

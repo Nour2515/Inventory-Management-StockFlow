@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StockFlow.DTOs.Product;
+using StockFlow.Exceptions;
 using StockFlow.Interfaces;
 
 namespace StockFlow.Controllers;
@@ -28,18 +29,13 @@ public class ProductsController : ControllerBase
     {
         var product = await _productService.GetByIdAsync(id);
         if (product == null)
-            return NotFound();
+            throw new NotFoundException("Product not found.");
         return Ok(product);
     }
 
     [Authorize(Roles = "Admin")]
     [HttpPost("Add")]
     public async Task<IActionResult> AddProduct (CreateProductRequest request){
-    if(!ModelState.IsValid)
-    {
-        return BadRequest(ModelState);
-
-    }
         var product = await _productService.CreateAsync(request);
         return CreatedAtAction(
             nameof(GetoneProduct),
@@ -51,8 +47,6 @@ public class ProductsController : ControllerBase
 
     public async Task<IActionResult> UpdateProduct(int id, UpdateProductRequest request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
         var product = await _productService.UpdateAsync(id, request);
         return Ok(product);
     }

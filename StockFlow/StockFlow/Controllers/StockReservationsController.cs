@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StockFlow.DTOs.Reservation;
+using StockFlow.Exceptions;
 using StockFlow.Interfaces;
 using System.Security.Claims;
 
@@ -22,7 +23,7 @@ public class StockReservationsController : ControllerBase
     {
         var reservation = await _stockReservationService.GetByIdAsync(id);
             if (reservation == null) 
-            return NotFound(); 
+            throw new NotFoundException("Reservation not found."); 
         return Ok(reservation);
     }
     [HttpGet("order/{orderId:int}")]
@@ -34,8 +35,6 @@ public class StockReservationsController : ControllerBase
     [HttpPost]
     [Authorize(Roles = "Admin,InventoryManager")]
     public async Task<IActionResult> CreateResevation([FromBody] CreateReservationRequest request) {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userIdClaim))
             return Unauthorized();

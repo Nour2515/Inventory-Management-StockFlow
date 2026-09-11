@@ -19,8 +19,6 @@ namespace StockFlow.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
             var response = await _authService.RegisterAsync(request);
             return Ok(response);
 
@@ -29,8 +27,6 @@ namespace StockFlow.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
             var response = await _authService.LoginAsync(request);
             return Ok(response);
         }
@@ -38,8 +34,6 @@ namespace StockFlow.Controllers
         [HttpPost("refresh-token")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
             var response = await _authService.RefreshTokenAsync(request.RefreshToken);
             return Ok(response);
         }
@@ -47,8 +41,6 @@ namespace StockFlow.Controllers
         [HttpPost("revoke-token")]
         public async Task<IActionResult> RevokeToken([FromBody] RefreshTokenRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
             await _authService.RevokeTokenAsync(request.RefreshToken);
             return Ok(new {message = "Token revoked successfully"});
         }

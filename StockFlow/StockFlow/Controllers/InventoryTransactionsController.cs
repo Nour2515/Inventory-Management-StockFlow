@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StockFlow.DTOs.Transaction;
 using StockFlow.Interfaces;
@@ -9,6 +10,8 @@ namespace StockFlow.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin,InventoryManager")]
+
 public class InventoryTransactionsController : ControllerBase
 {
     private readonly IinventoryTransactionservice _inventoryTransactionservice;
@@ -30,8 +33,6 @@ public class InventoryTransactionsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> ProcessTransaction([FromBody] CreateInventoryTransactionRequest request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
 
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userIdClaim))

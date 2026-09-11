@@ -10,6 +10,8 @@ using StockFlow.Models;
 using StockFlow.Models.Enums;
 using System.Runtime.CompilerServices;
 
+using StockFlow.Exceptions;
+
 namespace StockFlow.Services
 {
     public class inventoryTransactionservice : IinventoryTransactionservice
@@ -67,7 +69,7 @@ namespace StockFlow.Services
                 await _transactionRepository.GetByIdAsync(id);
 
             if (transaction == null)
-                return null;
+                throw new NotFoundException("Inventory transaction not found.");
 
             return new InventoryTransactionResponse
             {
@@ -200,28 +202,28 @@ namespace StockFlow.Services
         public async Task<InventoryTransactionResponse>ProcessTransactionAsync(CreateInventoryTransactionRequest request,int userId)
         {
             if (request.Quantity <= 0)
-                throw new Exception( "Quantity must be greater than zero.");
+                throw new ValidationException("Quantity must be greater than zero.");
 
             var product =await _productRepository.GetByIdAsync(request.ProductId);
 
             if (product == null)
-                throw new Exception("Product does not exist.");
+                throw new NotFoundException("Product does not exist.");
 
             var warehouse =await _warehouseRepository.GetByIdAsync(request.WarehouseId);
 
             if (warehouse == null)
-                throw new Exception(
+                throw new NotFoundException(
                     "Warehouse does not exist.");
 
             if (!warehouse.IsActive)
-                throw new Exception(
+                throw new BusinessRuleException(
                     "Warehouse is inactive.");
 
 
             var inventory =await _inventoryRepository.GetByProductAndWarehouseAsync(request.ProductId,request.WarehouseId);
 
             if (inventory == null)
-                throw new Exception("Inventory does not exist for this product and warehouse.");
+                throw new NotFoundException("Inventory does not exist for this product and warehouse.");
 
             InventoryTransaction? transaction = null;
 
@@ -248,7 +250,7 @@ namespace StockFlow.Services
 
                         if (request.Quantity >availableForSale)
                         {
-                            throw new Exception("Insufficient available stock.");
+                            throw new InsufficientStockException("Insufficient available stock.");
                         }
 
                         inventory.OnHandQuantity -= request.Quantity;
@@ -280,7 +282,7 @@ namespace StockFlow.Services
 
                         if (request.Quantity >availableForTransfer)
                         {
-                            throw new Exception("Insufficient available stock.");
+                            throw new InsufficientStockException("Insufficient available stock.");
                         }
 
                         inventory.OnHandQuantity -=request.Quantity;
@@ -295,7 +297,7 @@ namespace StockFlow.Services
 
                     default:
 
-                        throw new Exception("This transaction type cannot be processed here.");
+                        throw new BusinessRuleException("This transaction type cannot be processed here.");
                 }
 
 
@@ -341,7 +343,7 @@ namespace StockFlow.Services
             {
                 await dbTransaction.RollbackAsync();
 
-                throw new Exception(
+                throw new ConflictException(
                     "Inventory was modified by another request. Please try again.");
             }
             catch

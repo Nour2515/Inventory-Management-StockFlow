@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StockFlow.DTOs.Inventory;
+using StockFlow.Exceptions;
 using StockFlow.Interfaces;
 using StockFlow.Services;
 
@@ -8,6 +9,8 @@ namespace StockFlow.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = "Admin,InventoryManager")]
+
 public class InventoryController : ControllerBase
 {
     private readonly IinventoryServices _inventoryServices;
@@ -29,15 +32,13 @@ public class InventoryController : ControllerBase
     {
         var inventoryItem = await _inventoryServices.GetByIdAsync(id);
         if (inventoryItem == null)
-            return NotFound();
+            throw new NotFoundException("Inventory not found.");
         return Ok(inventoryItem);
     }
     [HttpPost]
     [Authorize(Roles = "Admin,InventoryManager")]
 
     public async Task<IActionResult> AddInventory(CreateInventoryRequest request) {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
         var Inventory = await _inventoryServices.CreateAsync(request);
         return Created();
     }
@@ -45,8 +46,6 @@ public class InventoryController : ControllerBase
     [Authorize(Roles = "Admin,InventoryManager")]
     public async Task<IActionResult> UpdateInventoy(int id, UpdateInventoryRequest request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
         var Inventory = await _inventoryServices.UpdateAsync(id, request);
         return Ok(Inventory);
 

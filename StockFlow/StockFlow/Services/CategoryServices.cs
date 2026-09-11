@@ -4,6 +4,8 @@ using StockFlow.IRepository;
 using StockFlow.Models;
 using System.Collections;
 
+using StockFlow.Exceptions;
+
 namespace StockFlow.Services
 {
     public class CategoryServices : ICategoryService
@@ -18,7 +20,7 @@ namespace StockFlow.Services
         {
             var exists = await _categoryRepository.ExistsByNameAsync(request.Name);
             if (exists)
-                throw new Exception("Category name already exists.");
+                throw new ConflictException("Category name already exists.");
             Category c = new Category
             {
                 Name = request.Name,
@@ -44,7 +46,7 @@ namespace StockFlow.Services
         {
             var category = await _categoryRepository.GetByIdAsync(id);
             if (category == null)
-                return null;
+                throw new NotFoundException("Category not found.");
             return new CategoryResponse
             {
                 Id = category.Id,
@@ -57,7 +59,7 @@ namespace StockFlow.Services
         {
             var category = await _categoryRepository.GetByIdAsync(id);
             if (category == null)
-                throw new Exception("Category not found.");
+                throw new NotFoundException("Category not found.");
 
             category.Name = request.Name;
             category.Description = request.Description;
@@ -77,10 +79,10 @@ namespace StockFlow.Services
         {
             var category = await _categoryRepository.GetByIdAsync(id);
             if (category == null)
-                throw new Exception("Category not found.");
+                throw new NotFoundException("Category not found.");
             var hasProducts = await _categoryRepository.HasProductsAsync(id);
             if (hasProducts)
-                throw new Exception("Cannot delete category because it contains products");
+                throw new ConflictException("Cannot delete category because it contains products.");
             _categoryRepository.Delete(category);
             await _categoryRepository.SaveChangesAsync();
         }

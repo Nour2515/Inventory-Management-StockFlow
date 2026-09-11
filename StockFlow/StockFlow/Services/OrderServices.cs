@@ -10,6 +10,8 @@ using StockFlow.IRepository;
 using StockFlow.Models;
 using StockFlow.Models.Enums;
 
+using StockFlow.Exceptions;
+
 namespace StockFlow.Services
 {
     public class OrderServices : IOrderServices
@@ -39,9 +41,9 @@ namespace StockFlow.Services
         public async Task<OrderResponse> CreateAsync(CreateOrderRequest request, int userid)
         {   
             if (request.Items == null || request.Items.Count == 0)
-                throw new Exception("Order must contain at least one item.");
+                throw new ValidationException("Order must contain at least one item.");
             if (request.Items.GroupBy(i => i.ProductId).Any(g => g.Count() > 1))
-                throw new Exception("The same product cannot appear more than once in the same order.");
+                throw new ConflictException("The same product cannot appear more than once in the same order.");
 
             var products = new Dictionary<int, Product>();
 
@@ -57,16 +59,16 @@ namespace StockFlow.Services
             {
                 if (item.quantity <= 0)
                 {
-                    throw new Exception("Quantity must be greater than zero.");
+                    throw new ValidationException("Quantity must be greater than zero.");
                 }
                 var product = await _productRepository.GetByIdAsync(item.ProductId);
                 if (product == null)
                 {
-                    throw new Exception("product not found");
+                    throw new NotFoundException("Product not found.");
                 }
                 if (!product.IsActive)
                 {
-                    throw new Exception($"Product '{product.Name}' is inactive.");
+                    throw new BusinessRuleException($"Product '{product.Name}' is inactive.");
                 }
                 products[item.ProductId] = product;
             }
@@ -98,7 +100,7 @@ namespace StockFlow.Services
                     var inventory = await _inventoryRepository.GetAvailableInventoryAsync(orderItem.ProductId, orderItem.Quantity);
                     if (inventory == null)
                     {
-                        throw new Exception($"Insufficient available stock for product '{products[orderItem.ProductId].Name}'. " + "No active warehouse can fully satisfy the requested quantity.");
+                        throw new InsufficientStockException($"Insufficient available stock for product '{products[orderItem.ProductId].Name}'. " + "No active warehouse can fully satisfy the requested quantity.");
                     }
                     var reservation = new StockReservation
                     {
@@ -137,7 +139,7 @@ namespace StockFlow.Services
             catch (DbUpdateConcurrencyException)
             {
                 await dbTransaction.RollbackAsync();
-                throw new Exception("Inventory was modified by another request. Please try again.");
+                throw new ConflictException("Inventory was modified by another request. Please try again.");
             }
             catch
             {
@@ -243,7 +245,7 @@ namespace StockFlow.Services
         {
             var orders = await _orderRepository.GetByIdAsync(id);
             if (orders == null)
-                return null;
+                throw new NotFoundException("Order not found.");
             return new OrderResponse
             {
                 Id = orders.Id,
@@ -260,16 +262,16 @@ namespace StockFlow.Services
             var order = await _orderRepository.GetByIdAsync(id);
 
             if (order == null)
-                throw new Exception("Order not found.");
+                throw new NotFoundException("Order not found.");
 
             if (order.Status == request.Status)
-                throw new Exception($"Order is already {order.Status}.");
+                throw new ConflictException($"Order is already {order.Status}.");
 
             if (order.Status == OrderStatus.Completed)
-                throw new Exception("Completed order cannot be updated.");
+                throw new ConflictException("Completed order cannot be updated.");
 
             if (order.Status == OrderStatus.Cancelled)
-                throw new Exception("Cancelled order cannot be updated.");
+                throw new ConflictException("Cancelled order cannot be updated.");
 
 
             // Allowed transitions
@@ -284,7 +286,7 @@ namespace StockFlow.Services
 
             if (!validTransition)
             {
-                throw new Exception($"Invalid order status transition from " +$"{order.Status} to {request.Status}.");
+                throw new BusinessRuleException($"Invalid order status transition from " +$"{order.Status} to {request.Status}.");
             }
 
             var changedInventories = new List<Inventory>();
@@ -305,11 +307,11 @@ namespace StockFlow.Services
                         var inventory =await _inventoryRepository.GetByProductAndWarehouseAsync(reservation.ProductId,reservation.WarehouseId);
 
                         if (inventory == null)
-                            throw new Exception("Inventory not found.");
+                            throw new NotFoundException("Inventory not found.");
 
                         if (inventory.ReservedQuantity <reservation.Quantity)
                         {
-                            throw new Exception("Reserved quantity is invalid.");
+                            throw new BusinessRuleException("Reserved quantity is invalid.");
                         }
 
                         // فك الحجز
@@ -358,7 +360,7 @@ namespace StockFlow.Services
 
                     if (reservations.Count == 0)
                     {
-                        throw new Exception("Order has no active reservations.");
+                        throw new ConflictException("Order has no active reservations.");
                     }
 
 
@@ -367,18 +369,18 @@ namespace StockFlow.Services
                         var inventory =await _inventoryRepository.GetByProductAndWarehouseAsync(reservation.ProductId,reservation.WarehouseId);
 
                         if (inventory == null)
-                            throw new Exception("Inventory not found.");
+                            throw new NotFoundException("Inventory not found.");
 
 
                         if (inventory.ReservedQuantity <reservation.Quantity)
                         {
-                            throw new Exception("Reserved quantity is invalid.");
+                            throw new BusinessRuleException("Reserved quantity is invalid.");
                         }
 
 
                         if (inventory.OnHandQuantity < reservation.Quantity)
                         {
-                            throw new Exception(
+                            throw new InsufficientStockException(
                                 "Insufficient on-hand quantity.");
                         }
 
@@ -463,7 +465,7 @@ namespace StockFlow.Services
             {
                 await dbTransaction.RollbackAsync();
 
-                throw new Exception("Order or inventory was modified by another request. Please try again.");
+                throw new ConflictException("Order or inventory was modified by another request. Please try again.");
             }
             catch
             {

@@ -4,6 +4,8 @@ using StockFlow.Interfaces;
 using StockFlow.IRepository;
 using StockFlow.Models;
 
+using StockFlow.Exceptions;
+
 namespace StockFlow.Services
 {
     public class ProductServices : IProductService
@@ -22,12 +24,12 @@ namespace StockFlow.Services
         {
             var categoryExists = await _categoryRepository.ExistsAsync(request.CategoryId);
             if (!categoryExists)
-                throw new Exception("Category not found.");
+                throw new NotFoundException("Category not found.");
             var skuExists = await _productRepository.ExistsBySKUAsync(request.SKU);
             if (skuExists)
-                throw new Exception("already exists.");
+                throw new ConflictException("SKU already exists.");
             if (request.Price < 0)
-                throw new Exception("Price cannot be negative.");
+                throw new ValidationException("Price cannot be negative.");
             Product p = new Product
             {
                 Name = request.Name,
@@ -60,12 +62,12 @@ namespace StockFlow.Services
             //ExistsAsync return bool
             var exists = await _productRepository.ExistsAsync(id);
             if (!exists)
-                throw new Exception("Product not found.");
+                throw new NotFoundException("Product not found.");
             //return object of product
             var product = await _productRepository.GetByIdAsync(id);
             if(product.IsActive==false)
             {
-                throw new Exception("Product already deactive");
+                throw new ConflictException("Product already deactive.");
             }
             product.IsActive = false;
             product.UpdatedAt = DateTime.UtcNow;
@@ -100,7 +102,7 @@ namespace StockFlow.Services
         {
             var product = await _productRepository.GetByIdWithCategoryAsync(id);
             if (product == null)
-                throw new Exception("Product not found.");
+                throw new NotFoundException("Product not found.");
             return new ProductResponse
             {
                 Id = product.Id,
@@ -122,13 +124,13 @@ namespace StockFlow.Services
             var product = await _productRepository.GetByIdAsync(id);
 
             if (product == null)
-                throw new Exception("Product not found.");
+                throw new NotFoundException("Product not found.");
 
             var categoryExists =
                 await _categoryRepository.ExistsAsync(request.CategoryId);
 
             if (!categoryExists)
-                throw new Exception("Category not found.");
+                throw new NotFoundException("Category not found.");
 
             if (product.SKU != request.SKU)
             {
@@ -136,11 +138,11 @@ namespace StockFlow.Services
                     await _productRepository.ExistsBySKUAsync(request.SKU);
 
                 if (skuExists)
-                    throw new Exception("SKU already exists.");
+                    throw new ConflictException("SKU already exists.");
             }
 
             if (request.Price < 0)
-                throw new Exception("Price cannot be negative.");
+                throw new ValidationException("Price cannot be negative.");
 
             product.Name = request.Name;
             product.SKU = request.SKU;

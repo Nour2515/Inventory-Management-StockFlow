@@ -6,6 +6,8 @@ using StockFlow.DTOs;
 using StockFlow.Interfaces;
 using StockFlow.Models;
 
+using StockFlow.Exceptions;
+
 namespace StockFlow.Services
 {
     public class AuthServices : IAuthService
@@ -27,7 +29,7 @@ namespace StockFlow.Services
         var finduser=await _userManager.FindByEmailAsync(request.Email);
             if (finduser != null)
             {
-                throw new Exception("Email is already registered");
+                throw new ConflictException("Email is already registered.");
             }
             User user = new User
             {
@@ -41,7 +43,7 @@ namespace StockFlow.Services
             IdentityResult result = await _userManager.CreateAsync(user, request.Password);
             if (!result.Succeeded)
             {
-                throw new Exception("Failed to create user");
+                throw new ValidationException("Failed to create user.");
             }
             //cookies
             //await _signInManager.SignInAsync(user, false);
@@ -49,7 +51,7 @@ namespace StockFlow.Services
             //default role is customer
             var roleResult =await _userManager.AddToRoleAsync(user, "Customer"); 
             if (!roleResult.Succeeded)
-                throw new Exception("Failed to assign default role.");
+                throw new BusinessRuleException("Failed to assign default role.");
 
             var accessToken = _tokenService.GenerateAccessToken(user);
 
@@ -69,12 +71,12 @@ namespace StockFlow.Services
         {
             var user = await _userManager.FindByEmailAsync(request.Email);
             if (user == null)
-                throw new Exception("Invalid email or password.");
+                throw new UnauthorizedException("Invalid email or password.");
             if (!user.IsActive)
-                throw new Exception("User account is inactive.");
+                throw new ForbiddenException("User account is inactive.");
             var passwordValid = await _userManager.CheckPasswordAsync(user,request.Password);
             if (!passwordValid)
-                throw new Exception("Invalid email or password.");
+                throw new UnauthorizedException("Invalid email or password.");
 
             var accessToken = _tokenService.GenerateAccessToken(user);
 
@@ -97,16 +99,16 @@ namespace StockFlow.Services
                 .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
 
             if (storedToken == null)
-                throw new Exception("Invalid refresh token.");
+                throw new UnauthorizedException("Invalid refresh token.");
 
             if (storedToken.RevokedAt != null)
-                throw new Exception("Refresh token has been revoked.");
+                throw new UnauthorizedException("Refresh token has been revoked.");
 
             if (storedToken.ExpiresAt <= DateTime.UtcNow)
-                throw new Exception("Refresh token has expired.");
+                throw new UnauthorizedException("Refresh token has expired.");
 
             if (!storedToken.User.IsActive)
-                throw new Exception("User account is inactive.");
+                throw new ForbiddenException("User account is inactive.");
 
             // Revoke old refresh token
             storedToken.RevokedAt = DateTime.UtcNow;
@@ -134,7 +136,7 @@ namespace StockFlow.Services
                 .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
 
             if (storedToken == null)    
-                throw new Exception("Invalid refresh token.");
+                throw new UnauthorizedException("Invalid refresh token.");
 
             if (storedToken.RevokedAt != null)
                 return;

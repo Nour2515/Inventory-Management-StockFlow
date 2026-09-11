@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StockFlow.DTOs.Catagory;
+using StockFlow.Exceptions;
 using StockFlow.Interfaces;
 using System.Security.Claims;
 
@@ -26,15 +27,13 @@ public class CategoriesController : ControllerBase
     {
         var category = await _categoryService.GetByIdAsync(id);
         if (category == null)
-            return NotFound();
+            throw new NotFoundException("Category not found.");
         return Ok(category);
     }
     [Authorize(Roles = "Admin")]
     [HttpPost("Add")]
     public async Task<IActionResult> CreateCategory(CreateCategoryRequest request)
     {
-        if(!ModelState.IsValid)
-            return BadRequest(ModelState);
         var category = await _categoryService.CreateAsync(request);
         return CreatedAtAction(nameof(GetCategoryById), new { id = category.Id }, category);
     }
@@ -43,8 +42,6 @@ public class CategoriesController : ControllerBase
     [Authorize(Roles ="Admin")]
     public async Task<IActionResult> UpdateCategory(int id, UpdateCategoryRequest request)
     {
-        if(!ModelState.IsValid)
-            return BadRequest(ModelState);
         var category = await _categoryService.UpdateAsync(id, request);
         return Ok(category);
     }
@@ -56,4 +53,3 @@ public class CategoriesController : ControllerBase
         return NoContent();
     }
     }
-

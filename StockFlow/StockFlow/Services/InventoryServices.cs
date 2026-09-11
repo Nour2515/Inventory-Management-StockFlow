@@ -5,6 +5,8 @@ using StockFlow.Interfaces;
 using StockFlow.IRepository;
 using StockFlow.Models;
 
+using StockFlow.Exceptions;
+
 namespace StockFlow.Services
 {
     public class InventoryServices : IinventoryServices
@@ -27,17 +29,17 @@ namespace StockFlow.Services
         { 
             var product = await _productRepository.GetByIdAsync(request.ProductId);
             if(product==null)
-                throw new Exception("product does not exist");
+                throw new NotFoundException("Product does not exist.");
             var warehouse = await _warehouseRepository.GetByIdAsync(request.WarehouseId);
             if (warehouse == null)
-                throw new Exception("warehouse does not exist");
+                throw new NotFoundException("Warehouse does not exist.");
             if (!warehouse.IsActive) 
-                throw new Exception("Warehouse is inactive.");
+                throw new BusinessRuleException("Warehouse is inactive.");
             var existingInventory = await _inventoryRepository.GetByProductAndWarehouseAsync(request.ProductId, request.WarehouseId);
             if(existingInventory!=null)
-                throw new Exception("Inventory already exists for this product and warehouse.");
+                throw new ConflictException("Inventory already exists for this product and warehouse.");
             if (request.onhandQuantity < 0)
-                throw new Exception("quantity cannot be negative.");
+                throw new ValidationException("Quantity cannot be negative.");
             var inventory = new Inventory
             {
                 ProductId = request.ProductId,
@@ -52,7 +54,7 @@ namespace StockFlow.Services
             await _cacheService.InvalidateInventoryCacheAsync(inventory);
             return new InventoryResponse {
                 Id = inventory.Id, 
-                ProductId = inventory.ProductId, 
+                ProductId = inventory.ProductId,    
                 ProductName = product.Name, 
                 WarehouseId = inventory.WarehouseId, 
                 WarehouseName = warehouse.Name,
@@ -109,7 +111,7 @@ namespace StockFlow.Services
 
             var inventory = await _inventoryRepository.GetByIdAsync(id);
             if (inventory == null)
-                return null;
+                throw new NotFoundException("Inventory not found.");
 
             var result = new InventoryResponse
             {
@@ -133,9 +135,9 @@ namespace StockFlow.Services
         {
             var inventory = await _inventoryRepository.GetByIdAsync(id);
             if (inventory == null)
-                return null;
+                throw new NotFoundException("Inventory not found.");
             if (request.ReorderLevel < 0)
-                throw new Exception("Reorder level cannot be negative");
+                throw new ValidationException("Reorder level cannot be negative.");
             inventory.ReorderLevel = request.ReorderLevel;
             inventory.UpdatedAt = DateTime.UtcNow;
             _inventoryRepository.Update(inventory);
@@ -223,10 +225,10 @@ namespace StockFlow.Services
 
         public async Task<StockAvailabilityResponse> CheckAvailabilityAsync(int productId, int warehouseId, int quantity) {
             if (quantity <= 0)
-                throw new Exception("Quantity must be greater than zero");
+                throw new ValidationException("Quantity must be greater than zero.");
             var inventory = await _inventoryRepository.GetByProductAndWarehouseAsync(productId, warehouseId);
             if (inventory == null)
-                throw new Exception("inventory not found");
+                throw new NotFoundException("Inventory not found.");
             var availableQuantity = inventory.OnHandQuantity - inventory.ReservedQuantity;
             var IsAvailable = true;
             if (quantity > availableQuantity) { 

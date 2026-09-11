@@ -3,6 +3,8 @@ using StockFlow.Interfaces;
 using StockFlow.IRepository;
 using StockFlow.Models;
 
+using StockFlow.Exceptions;
+
 namespace StockFlow.Services
 {
     public class WarehouseServices : IWarehouseService
@@ -37,7 +39,7 @@ namespace StockFlow.Services
         {
             var warehouse = await _warehouserepo.GetByIdAsync(id);
             if(warehouse==null)
-                throw new Exception("Warehouse not found.");
+                throw new NotFoundException("Warehouse not found.");
             warehouse.IsActive = false;
             _warehouserepo.Update(warehouse);
             await _warehouserepo.SaveChangesAsync();
@@ -61,7 +63,8 @@ namespace StockFlow.Services
         public async Task<WarehouseResponse?> GetByIdAsync(int id)
         {
             var warehouse = await _warehouserepo.GetByIdAsync(id);
-            if (warehouse == null) return null;
+            if (warehouse == null)
+                throw new NotFoundException("Warehouse not found.");
 
             return new WarehouseResponse
             {
@@ -77,7 +80,7 @@ namespace StockFlow.Services
         {
             var warehouse = await _warehouserepo.GetByIdAsync(id);
             if (warehouse == null) 
-                throw new InvalidOperationException("Warehouse not found");
+                throw new NotFoundException("Warehouse not found.");
 
             warehouse.Name = request.name;
             warehouse.Location = request.location;
