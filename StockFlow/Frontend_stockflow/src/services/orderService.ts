@@ -11,6 +11,11 @@ export async function getMyOrders() {
   return response.data;
 }
 
+export async function getAllOrders() {
+  const response = await apiClient.get<OrderResponse[]>("/api/Orders");
+  return response.data;
+}
+
 export async function updateOrderStatus(id: number, request: UpdateOrderStatusRequest) {
   const response = await apiClient.put<ApiResult>(`/api/Orders/${id}/status`, request);
   return response.data;

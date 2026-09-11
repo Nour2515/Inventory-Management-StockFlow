@@ -23,6 +23,49 @@ export type CreateProductRequest = {
   categoryId: number;
 };
 
+export type UpdateProductRequest = {
+  name: string;
+  sku: string;
+  description?: string;
+  price: number;
+  categoryId: number;
+  isActive: boolean;
+};
+
+export type CategoryResponse = {
+  id: number;
+  name: string;
+  description?: string | null;
+};
+
+export type CreateCategoryRequest = {
+  name: string;
+  description?: string;
+};
+
+export type UpdateCategoryRequest = {
+  name: string;
+  description?: string;
+};
+
+export type WarehouseResponse = {
+  id: number;
+  name: string;
+  location: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type CreateWarehouseRequest = {
+  name: string;
+  location: string;
+};
+
+export type UpdateWarehouseRequest = {
+  name: string;
+  location: string;
+};
+
 export type ProductResponse = {
   id: number;
   name: string;
@@ -103,7 +146,6 @@ export type CreateReservationRequest = {
   productId: number;
   warehouseId: number;
   quantity: number;
-  createdByUserId: number;
 };
 
 export type ReservationResponse = {

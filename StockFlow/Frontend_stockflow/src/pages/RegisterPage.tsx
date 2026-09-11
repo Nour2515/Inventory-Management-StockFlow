@@ -1,21 +1,22 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { saveTokens } from "../api/tokenStore";
-import { ResultPanel } from "../components/ResultPanel";
+import { FormError } from "../components/FormError";
 import { TextInput } from "../components/TextInput";
-import { useApiTester } from "../hooks/useApiTester";
 import { register } from "../services/authService";
 
 export function RegisterPage() {
-  const tester = useApiTester();
-  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<unknown>(null);
   const navigate = useNavigate();
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setLoading(true);
+    setError(null);
     const form = new FormData(event.currentTarget);
 
-    tester.run(async () => {
+    try {
       const response = await register({
         firstName: String(form.get("firstName") ?? ""),
         lastName: String(form.get("lastName") ?? ""),
@@ -24,24 +25,31 @@ export function RegisterPage() {
       });
 
       saveTokens(response.accessToken, response.refreshToken);
-      setSaved(true);
-      navigate("/");
-      return response;
-    });
+      navigate("/orders");
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <main>
-      <h1>Register</h1>
-      <form onSubmit={onSubmit}>
+    <div className="auth-card">
+      <h1>Create account</h1>
+      <p className="auth-subtitle">New accounts receive the Customer role by default.</p>
+      <FormError error={error} />
+      <form className="stacked-form" onSubmit={onSubmit}>
         <TextInput label="First name" name="firstName" required />
         <TextInput label="Last name" name="lastName" required />
         <TextInput label="Email" name="email" type="email" required />
         <TextInput label="Password" name="password" type="password" required />
-        <button type="submit">Register</button>
+        <button type="submit" className="btn btn-primary" disabled={loading}>
+          {loading ? "Creating account…" : "Register"}
+        </button>
       </form>
-      {saved && <p className="success">Access token saved for API requests.</p>}
-      <ResultPanel {...tester} />
-    </main>
+      <p className="auth-footer">
+        Already have an account? <Link to="/login">Login</Link>
+      </p>
+    </div>
   );
 }

@@ -18,20 +18,44 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+type ApiErrorBody = {
+  message?: string;
+  title?: string;
+  detail?: string;
+  errors?: Record<string, string[]>;
+};
+
+export function getFieldErrors(error: unknown): Record<string, string[]> | null {
+  if (!axios.isAxiosError(error)) {
+    return null;
+  }
+
+  const data = error.response?.data as ApiErrorBody | undefined;
+  if (data?.errors && typeof data.errors === "object") {
+    return data.errors;
+  }
+
+  return null;
+}
+
 export function getErrorMessage(error: unknown) {
   if (!axios.isAxiosError(error)) {
     return "Unexpected error";
   }
 
-  const data = error.response?.data;
+  const data = error.response?.data as ApiErrorBody | string | undefined;
 
   if (typeof data === "string") {
     return data;
+  }
+
+  if (data?.message) {
+    return data.message;
   }
 
   if (data?.errors) {
     return Object.values(data.errors).flat().join(" ");
   }
 
-  return data?.message ?? data?.title ?? data?.detail ?? error.message;
+  return data?.title ?? data?.detail ?? error.message;
 }

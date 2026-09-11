@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { getErrorMessage } from "../api/client";
+import { FormError } from "../components/FormError";
+import { RequireRole } from "../components/RequireRole";
 import { TextInput } from "../components/TextInput";
 import { useAuth } from "../hooks/useAuth";
 import { getInventory } from "../services/inventoryService";
-import { getMyOrders } from "../services/orderService";
+import { getAllOrders } from "../services/orderService";
 import {
   cancelReservation,
   createReservation,
@@ -11,6 +12,7 @@ import {
   releaseReservation,
 } from "../services/reservationService";
 import type { InventoryResponse, OrderResponse, ReservationResponse } from "../types/api";
+import { canAdminOrders, ROLES } from "../utils/auth";
 
 export function ReservationsPage() {
   const auth = useAuth();
@@ -20,7 +22,8 @@ export function ReservationsPage() {
   const [selectedOrderId, setSelectedOrderId] = useState(0);
   const [selectedProductId, setSelectedProductId] = useState(0);
   const [selectedInventoryId, setSelectedInventoryId] = useState(0);
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
 
   const selectedOrder = orders.find((order) => order.id === selectedOrderId);
   const orderProducts = selectedOrder?.items ?? [];
@@ -30,14 +33,20 @@ export function ReservationsPage() {
   );
 
   async function loadBaseData() {
-    setError("");
+    setLoading(true);
+    setError(null);
 
     try {
-      const [orderRows, inventoryRows] = await Promise.all([getMyOrders(), getInventory()]);
+      const [orderRows, inventoryRows] = await Promise.all([
+        getAllOrders(),
+        getInventory(),
+      ]);
       setOrders(orderRows);
       setInventory(inventoryRows);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(err);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -47,26 +56,27 @@ export function ReservationsPage() {
       return;
     }
 
-    setError("");
+    setError(null);
 
     try {
       setReservations(await getReservationsByOrder(orderId));
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(err);
     }
   }
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => void loadBaseData(), 0);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
+    if (canAdminOrders(auth.roles) || auth.roles.includes(ROLES.InventoryManager)) {
+      void loadBaseData();
+    }
+  }, [auth.roles]);
 
   async function submitReservation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const inventoryRow = inventory.find((row) => row.id === selectedInventoryId);
 
     if (!selectedOrderId || !selectedProductId || !inventoryRow) {
-      setError("Choose an order, product, and warehouse.");
+      setError(new Error("Choose an order, product, and warehouse."));
       return;
     }
 
@@ -78,12 +88,11 @@ export function ReservationsPage() {
         productId: selectedProductId,
         warehouseId: inventoryRow.warehouseId,
         quantity: Number(form.get("quantity") ?? 0),
-        createdByUserId: auth.userId ?? 0,
       });
       event.currentTarget.reset();
       await loadReservations(selectedOrderId);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(err);
     }
   }
 
@@ -92,7 +101,7 @@ export function ReservationsPage() {
       await releaseReservation(id);
       await loadReservations(selectedOrderId);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(err);
     }
   }
 
@@ -101,111 +110,159 @@ export function ReservationsPage() {
       await cancelReservation(id);
       await loadReservations(selectedOrderId);
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(err);
     }
   }
 
   return (
-    <main>
-      <h1>Reservations</h1>
-      {error && <p className="error-text">{error}</p>}
+    <RequireRole allowed={[ROLES.Admin, ROLES.InventoryManager]}>
+      <main className="page">
+        <header className="page-header">
+          <h1>Reservations</h1>
+          <p>
+            Reserve stock against orders. There is no list-all endpoint — choose an order to load
+            its reservations.
+          </p>
+        </header>
 
-      <section className="panel">
-        <h2>Choose order</h2>
-        <select
-          value={selectedOrderId || ""}
-          onChange={(event) => {
-            const orderId = Number(event.target.value);
-            setSelectedOrderId(orderId);
-            setSelectedProductId(0);
-            setSelectedInventoryId(0);
-            void loadReservations(orderId);
-          }}
-        >
-          <option value="">Choose order</option>
-          {orders.map((order) => (
-            <option key={order.id} value={order.id}>
-              Order #{order.id} - {order.status} - {order.totalAmount}
-            </option>
-          ))}
-        </select>
-      </section>
+        <FormError error={error} />
 
-      <form onSubmit={submitReservation}>
-        <h2>Create reservation</h2>
-        <label>
-          Product from order
-          <select
-            value={selectedProductId || ""}
-            onChange={(event) => {
-              setSelectedProductId(Number(event.target.value));
-              setSelectedInventoryId(0);
-            }}
-            required
-          >
-            <option value="">Choose product</option>
-            {orderProducts.map((item) => (
-              <option key={item.productId} value={item.productId}>
-                {item.productName} ordered: {item.quantity}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Warehouse inventory
-          <select
-            value={selectedInventoryId || ""}
-            onChange={(event) => setSelectedInventoryId(Number(event.target.value))}
-            required
-          >
-            <option value="">Choose warehouse</option>
-            {matchingInventory.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.warehouseName} available: {row.availableQuantity}
-              </option>
-            ))}
-          </select>
-        </label>
-        <TextInput label="Quantity" name="quantity" type="number" required />
-        <button type="submit">Create reservation</button>
-      </form>
+        {loading ? (
+          <p className="loading-state">Loading…</p>
+        ) : (
+          <>
+            <section className="card">
+              <h2>Select order</h2>
+              <label>
+                Order
+                <select
+                  value={selectedOrderId || ""}
+                  onChange={(event) => {
+                    const orderId = Number(event.target.value);
+                    setSelectedOrderId(orderId);
+                    setSelectedProductId(0);
+                    setSelectedInventoryId(0);
+                    void loadReservations(orderId);
+                  }}
+                >
+                  <option value="">Choose order</option>
+                  {orders.map((order) => (
+                    <option key={order.id} value={order.id}>
+                      #{order.id} — {order.status} — {order.totalAmount.toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
 
-      <section>
-        <h2>Reservations for selected order</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Warehouse</th>
-              <th>Quantity</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th>Expires</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reservations.map((reservation) => (
-              <tr key={reservation.id}>
-                <td>{reservation.productName}</td>
-                <td>{reservation.warehouseName}</td>
-                <td>{reservation.quantity}</td>
-                <td>{reservation.status}</td>
-                <td>{new Date(reservation.createdAt).toLocaleString()}</td>
-                <td>{new Date(reservation.expiresAt).toLocaleString()}</td>
-                <td>
-                  <button type="button" onClick={() => void release(reservation.id)}>
-                    Release
+            {selectedOrderId > 0 && (
+              <section className="card">
+                <h2>Create reservation</h2>
+                <form className="stacked-form" onSubmit={submitReservation}>
+                  <label>
+                    Product from order
+                    <select
+                      value={selectedProductId || ""}
+                      onChange={(event) => {
+                        setSelectedProductId(Number(event.target.value));
+                        setSelectedInventoryId(0);
+                      }}
+                      required
+                    >
+                      <option value="">Choose product</option>
+                      {orderProducts.map((item) => (
+                        <option key={item.productId} value={item.productId}>
+                          {item.productName} (ordered: {item.quantity})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Warehouse
+                    <select
+                      value={selectedInventoryId || ""}
+                      onChange={(event) => setSelectedInventoryId(Number(event.target.value))}
+                      required
+                    >
+                      <option value="">Choose warehouse</option>
+                      {matchingInventory.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.warehouseName} — available: {row.availableQuantity}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <TextInput label="Quantity" name="quantity" type="number" required />
+                  <button type="submit" className="btn btn-primary">
+                    Create reservation
                   </button>
-                  <button type="button" onClick={() => void cancel(reservation.id)}>
-                    Cancel
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-    </main>
+                </form>
+              </section>
+            )}
+
+            <section className="card">
+              <h2>Reservations {selectedOrderId ? `for order #${selectedOrderId}` : ""}</h2>
+              {!selectedOrderId ? (
+                <p className="empty-state">Select an order to view reservations.</p>
+              ) : reservations.length === 0 ? (
+                <p className="empty-state">No reservations for this order.</p>
+              ) : (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Order</th>
+                        <th>Product</th>
+                        <th>Warehouse</th>
+                        <th>Qty</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Expires</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reservations.map((reservation) => (
+                        <tr key={reservation.id}>
+                          <td>{reservation.orderId}</td>
+                          <td>{reservation.productName}</td>
+                          <td>{reservation.warehouseName}</td>
+                          <td>{reservation.quantity}</td>
+                          <td>
+                            <span className="status-pill">{reservation.status}</span>
+                          </td>
+                          <td>{new Date(reservation.createdAt).toLocaleString()}</td>
+                          <td>{new Date(reservation.expiresAt).toLocaleString()}</td>
+                          <td>
+                            {reservation.status === "Active" && (
+                              <div className="row-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => void release(reservation.id)}
+                                >
+                                  Release
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-danger btn-sm"
+                                  onClick={() => void cancel(reservation.id)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </main>
+    </RequireRole>
   );
 }

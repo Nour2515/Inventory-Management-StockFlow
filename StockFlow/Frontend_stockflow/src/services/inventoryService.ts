@@ -1,5 +1,6 @@
 import { apiClient } from "../api/client";
 import type {
+  CreateInventoryRequest,
   InventoryResponse,
   StockAvailabilityResponse,
   UpdateInventoryRequest,
@@ -20,4 +21,8 @@ export async function getAvailability(productId: number, warehouseId: number, qu
 export async function updateInventory(id: number, request: UpdateInventoryRequest) {
   const response = await apiClient.put<InventoryResponse>(`/api/Inventory/${id}`, request);
   return response.data;
+}
+
+export async function createInventory(request: CreateInventoryRequest) {
+  await apiClient.post("/api/Inventory", request);
 }

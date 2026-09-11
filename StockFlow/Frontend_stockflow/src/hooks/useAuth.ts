@@ -6,9 +6,12 @@ type TokenPayload = {
   sub?: string;
   email?: string;
   unique_name?: string;
+  name?: string;
   role?: string | string[];
   "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"?: string | string[];
   "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"?: string;
+  "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"?: string;
+  "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"?: string;
 };
 
 function decodePayload(token: string): TokenPayload | null {
@@ -53,11 +56,21 @@ export function useAuth() {
     window.dispatchEvent(new Event("stockflow:auth-changed"));
   }
 
+  const email =
+    payload?.email ??
+    payload?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"];
+  const displayName =
+    payload?.name ??
+    payload?.unique_name ??
+    payload?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"];
+
   return {
     accessToken,
     refreshToken,
     isAuthenticated: Boolean(accessToken),
     roles,
+    email,
+    displayName,
     userId: userId ? Number(userId) : undefined,
     logout,
   };
