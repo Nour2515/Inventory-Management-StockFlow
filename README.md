@@ -362,18 +362,6 @@ AsNoTracking()
 
 ---
 
-## Logging
-
-The application uses:
-
-```csharp
-ILogger<T>
-```
-
-for logging errors and important operations across services, caching, and background jobs.
-
----
-
 ## Docker
 
 Docker is used mainly to run infrastructure services such as Redis.
